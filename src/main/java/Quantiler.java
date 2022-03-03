@@ -18,19 +18,21 @@ import java.util.concurrent.TimeUnit;
 public class Quantiler {
 
     public static final int KLL_PARAM_K = 350;
-    public static final int MOMEMNTS_PARAM_K = 15;
+    public static final int MOMEMNTS_PARAM_K = 10;
     public static final int UDDS_PARAM_MAX_NUM_BUCKETS = 1024;
     public static final int UDDS_PARAM_K = 12;
     public static final double DDS_PARAM_RELATIVE_ACCURACY = 0.01;
     public static final double UDDS_PARAM_RELATIVE_ACCURACY = 0.01;
-    public static final int REQ_PARAM_K = 16;
-    public static final boolean REQ_PARAM_HIGH_RANK_ACCURACY = false;
-    public static final boolean REQ_PARAM_LT_EQ = true;
+    public static final int REQ_PARAM_K = 30;
+    public static final boolean REQ_PARAM_HIGH_RANK_ACCURACY = true;
+    public static final boolean REQ_PARAM_LT_EQ = false;
     public static final boolean CALC_POWER_STATS = false;
     public static final boolean CALC_NYT_STATS = false;
     public static final boolean RUN_K_TESTS = false;
     public static final boolean RUN_INIT_TESTS = false;
     public static final boolean PRINT_QUERY_RESULTS = false;
+    public static final boolean RUN_KURT_POWER = true;
+    public static final boolean RUN_KURT_NYT = true;
     private static final boolean RUN_UDDS_TESTS = false;
 
     public static void main(String[] args) {
@@ -45,6 +47,7 @@ public class Quantiler {
             UniformDDSketch uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
             KllFloatsSketch kllsketch = new KllFloatsSketch(KLL_PARAM_K);
             SimpleMomentSketch momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+            momentSketch.setCompressed(true);
             ReqSketch reqSketch =
                 ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                     .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -225,6 +228,7 @@ public class Quantiler {
                 uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                 kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                 momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                momentSketch.setCompressed(true);
                 reqSketch =
                     ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                         .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -263,101 +267,109 @@ public class Quantiler {
                 System.out.println(resultString);
                 kurtosisWriter.write(resultString + "\n");
 
-                ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
-                uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
-                kllsketch = new KllFloatsSketch(KLL_PARAM_K);
-                momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-                reqSketch =
-                    ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
-                        .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
-                actualKurtosisData.clear();
-
                 // Power dataset
                 String line;
-                String delimiterPowerDataset = ";";
-                BufferedReader brPower =
-                    new BufferedReader(
-                        new FileReader("/home/m34ferna/flink-benchmarks/household_power_consumption.txt"));
-                while ((line = brPower.readLine()) != null) {
-                    String[] line_array = line.split(delimiterPowerDataset);    // use comma as separator
-                    double globalActivePower = Double.parseDouble(line_array[2]);
-                    actualKurtosisData.add(globalActivePower);
-                    momentSketch.add(globalActivePower);
-                    ddsketch.accept(globalActivePower);
-                    kllsketch.update((float) globalActivePower);
-                    reqSketch.update((float) globalActivePower);
-                    uddsketch.accept(globalActivePower);
+                if (RUN_KURT_POWER) {
+                    ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                    uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                    kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                    momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                    momentSketch.setCompressed(true);
+                    reqSketch =
+                        ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                            .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+                    actualKurtosisData.clear();
+
+                    String delimiterPowerDataset = ";";
+                    BufferedReader brPower =
+                        new BufferedReader(
+                            new FileReader("/home/m34ferna/flink-benchmarks/household_power_consumption.txt"));
+                    while ((line = brPower.readLine()) != null) {
+                        String[] line_array = line.split(delimiterPowerDataset);    // use comma as separator
+                        double globalActivePower = Double.parseDouble(line_array[2]);
+                        actualKurtosisData.add(globalActivePower);
+                        momentSketch.add(globalActivePower);
+                        ddsketch.accept(globalActivePower);
+                        kllsketch.update((float) globalActivePower);
+                        reqSketch.update((float) globalActivePower);
+                        uddsketch.accept(globalActivePower);
+                    }
+
+                    kurtosis = new Kurtosis();
+
+                    target = new double[actualKurtosisData.size()];
+                    for (int i = 0; i < target.length; i++) {
+                        target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
+                    }
+
+                    kurtosisVal = round(kurtosis.evaluate(target), 4);
+                    System.out.println("Kurtosis (Power) : " + kurtosisVal);
+
+                    Collections.sort(actualKurtosisData);
+                    realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                    momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                    ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                    reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                    uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    resultString =
+                        "Power," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
+                            "," +
+                            uddsQ;
+                    System.out.println(resultString);
+                    kurtosisWriter.write(resultString + "\n");
                 }
 
-                kurtosis = new Kurtosis();
+                if (RUN_KURT_NYT) {
+                    ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                    uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                    kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                    momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                    momentSketch.setCompressed(true);
+                    reqSketch =
+                        ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                            .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+                    actualKurtosisData.clear();
 
-                target = new double[actualKurtosisData.size()];
-                for (int i = 0; i < target.length; i++) {
-                    target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
+                    // NYT dataset
+                    String splitBy = ",";
+                    BufferedReader brNYT =
+                        new BufferedReader(new FileReader("/home/m34ferna/flink-benchmarks/nyt-data.csv"));
+                    while ((line = brNYT.readLine()) != null) {
+                        String[] line_array = line.split(splitBy);    // use comma as separator
+                        double totalAmount = Double.parseDouble(line_array[10]);
+                        actualKurtosisData.add(totalAmount);
+                        momentSketch.add(totalAmount);
+                        ddsketch.accept(totalAmount);
+                        kllsketch.update((float) totalAmount);
+                        reqSketch.update((float) totalAmount);
+                        uddsketch.accept(totalAmount);
+                    }
+
+                    kurtosis = new Kurtosis();
+
+                    target = new double[actualKurtosisData.size()];
+                    for (int i = 0; i < target.length; i++) {
+                        target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
+                    }
+
+                    kurtosisVal = round(kurtosis.evaluate(target), 4);
+                    System.out.println("Kurtosis (NYT) : " + kurtosisVal);
+
+                    Collections.sort(actualKurtosisData);
+                    realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                    momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                    ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                    reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                    uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    resultString =
+                        "NYT," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
+                            "," +
+                            uddsQ;
+                    System.out.println(resultString);
+                    kurtosisWriter.write(resultString + "\n");
                 }
-
-                kurtosisVal = round(kurtosis.evaluate(target), 4);
-                System.out.println("Kurtosis (Power) : " + kurtosisVal);
-
-                Collections.sort(actualKurtosisData);
-                realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
-                ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
-                reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
-                uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                resultString =
-                    "Power," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ + "," +
-                        uddsQ;
-                System.out.println(resultString);
-                kurtosisWriter.write(resultString + "\n");
-
-                ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
-                uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
-                kllsketch = new KllFloatsSketch(KLL_PARAM_K);
-                momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-                reqSketch =
-                    ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
-                        .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
-                actualKurtosisData.clear();
-
-                // NYT dataset
-                String splitBy = ",";
-                BufferedReader brNYT =
-                    new BufferedReader(new FileReader("/home/m34ferna/flink-benchmarks/nyt-data.csv"));
-                while ((line = brNYT.readLine()) != null) {
-                    String[] line_array = line.split(splitBy);    // use comma as separator
-                    double totalAmount = Double.parseDouble(line_array[10]);
-                    actualKurtosisData.add(totalAmount);
-                    momentSketch.add(totalAmount);
-                    ddsketch.accept(totalAmount);
-                    kllsketch.update((float) totalAmount);
-                    reqSketch.update((float) totalAmount);
-                    uddsketch.accept(totalAmount);
-                }
-
-                kurtosis = new Kurtosis();
-
-                target = new double[actualKurtosisData.size()];
-                for (int i = 0; i < target.length; i++) {
-                    target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
-                }
-
-                kurtosisVal = round(kurtosis.evaluate(target), 4);
-                System.out.println("Kurtosis (NYT) : " + kurtosisVal);
-
-                Collections.sort(actualKurtosisData);
-                realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
-                ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
-                reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
-                uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                resultString =
-                    "NYT," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ + "," +
-                        uddsQ;
-                System.out.println(resultString);
-                kurtosisWriter.write(resultString + "\n");
 
                 kurtosisWriter.close();
             }
@@ -688,6 +700,7 @@ public class Quantiler {
         System.out.println(KllFloatsSketch.getKFromEpsilon(0.01, true));
         System.out.println(KllFloatsSketch.getKFromEpsilon(0.01, false));
         System.out.println("End K");
+        System.out.println("RSE: " + ReqSketch.builder().build().getRSE(30, 0.98, false, 1_000_000));
     }
 
     private static void calcPowerDatasetStats() throws IOException {
