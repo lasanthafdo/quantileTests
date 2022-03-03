@@ -2,6 +2,7 @@ import com.datadoghq.sketch.ddsketch.DDSketch;
 import com.datadoghq.sketch.uddsketch.UniformDDSketch;
 import com.github.stanfordfuturedata.momentsketch.SimpleMomentSketch;
 import org.apache.commons.math3.distribution.*;
+import org.apache.commons.math3.stat.descriptive.moment.Kurtosis;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.datasketches.kll.KllFloatsSketch;
 import org.apache.datasketches.req.ReqSketch;
@@ -16,7 +17,6 @@ import java.util.concurrent.TimeUnit;
 
 public class Quantiler {
 
-    public static final boolean RUN_MERGE_SKETCHES = false;
     public static final int KLL_PARAM_K = 350;
     public static final int MOMEMNTS_PARAM_K = 15;
     public static final int UDDS_PARAM_MAX_NUM_BUCKETS = 1024;
@@ -31,39 +31,16 @@ public class Quantiler {
     public static final boolean RUN_K_TESTS = false;
     public static final boolean RUN_INIT_TESTS = false;
     public static final boolean PRINT_QUERY_RESULTS = false;
+    private static final boolean RUN_UDDS_TESTS = false;
 
     public static void main(String[] args) {
         int runMode = Integer.parseInt(args[0]);
         try {
-
-            // Sketch Algorithms
             double[] percentiles = {0.01, 0.05, 0.25, 0.50, 0.75, 0.9, 0.95, 0.98, 0.99};
-
-            ZipfDistribution zipfDistribution = new ZipfDistribution(50, 1.5);
-            int[] data = zipfDistribution.sample(1000000);
-
-            /*
-            double[] percentiles = {0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1,  0.11, 0.12, 0.13,
-                    0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.2,  0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27,
-                    0.28, 0.29, 0.3,  0.31, 0.32, 0.33, 0.34, 0.35, 0.36, 0.37, 0.38, 0.39, 0.4,  0.41,
-                    0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.5,  0.51, 0.52, 0.53, 0.54, 0.55,
-                    0.56, 0.57, 0.58, 0.59, 0.6,  0.61, 0.62, 0.63, 0.64, 0.65, 0.66, 0.67, 0.68, 0.69,
-                    0.7,  0.71, 0.72, 0.73, 0.74, 0.75, 0.76, 0.77, 0.78, 0.79, 0.8,  0.81, 0.82, 0.83,
-                    0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9,  0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97,
-                    0.98, 0.99};
-
-            int[] percentiles2 = {1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,
-                    14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,
-                    28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,  41,
-                    42,  43,  44,  45,  46,  47,  48,  49,  50,  51,  52,  53,  54,  55,
-                    56,  57,  58,  59,  60,  61,  62,  63,  64,  65,  66,  67,  68,  69,
-                    70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  81,  82,  83,
-                    84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,  96,  97,
-                    98,  99};
-             */
-
             double alphaZero =
                 Math.tanh(FastMath.atanh(UDDS_PARAM_RELATIVE_ACCURACY) / Math.pow(2.0, UDDS_PARAM_K - 1));
+
+            // Sketch Algorithms
             DDSketch ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
             UniformDDSketch uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
             KllFloatsSketch kllsketch = new KllFloatsSketch(KLL_PARAM_K);
@@ -71,7 +48,6 @@ public class Quantiler {
             ReqSketch reqSketch =
                 ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                     .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
-            // Synthetic Workloads
 
             if (RUN_K_TESTS) {
                 runKTests();
@@ -81,6 +57,9 @@ public class Quantiler {
                 initTestSketches();
             }
 
+            if (RUN_UDDS_TESTS) {
+                runUDDSTests();
+            }
             int dataSizeMerge = 1_000_000;
             if (runMode == 3) {
                 ArrayList<Integer> numSketchesList = new ArrayList<>();
@@ -91,10 +70,11 @@ public class Quantiler {
             }
 
 
-            // ADAPTABILITY TEST
-
             int dataSizeAdaptability = 500000;
-            ArrayList<Double> all_data = new ArrayList<Double>();
+            int dataSizeKurtosis = 1000000;
+            ArrayList<Double> all_data = new ArrayList<>();
+
+            // Synthetic Workloads
             BinomialDistribution binD = new BinomialDistribution(30, 0.4);
             System.out.println("Binomial Distribution mean: " + binD.getNumericalMean());
 
@@ -104,131 +84,279 @@ public class Quantiler {
             GammaDistribution gd = new GammaDistribution(2, 0.4);
             System.out.println("Gamma mean: " + gd.getNumericalMean());
 
-            UniformRealDistribution unif_adapt_test = new UniformRealDistribution(40, 100);
-            System.out.println("Uniform mean: " + unif_adapt_test.getNumericalMean());
+            UniformRealDistribution uD = new UniformRealDistribution(40, 100);
+            System.out.println("Uniform mean: " + uD.getNumericalMean());
+
+            UniformRealDistribution unif_adapt_test = new UniformRealDistribution(30, 100);
+            System.out.println("Uniform (Adapt) mean: " + unif_adapt_test.getNumericalMean());
 
             ParetoDistribution ptoD = new ParetoDistribution(1, 1);
             System.out.println("Pareto mean: " + ptoD.getNumericalMean());
 
             // *********************************
             // Adaptability tests
-//            String sketchName = "UDDSketch";
-//            long startInsert = System.nanoTime();
-//
-//            for (int i = 0; i < dataSizeAdaptability; i++) {
-//                double sampled_value = binD.sample();
-//                double sampled_value_2 = gd.sample();
-//                all_data.add(sampled_value);
-//                ddsketch.accept(sampled_value);
-//                ddsketch.accept(sampled_value_2);
-//                uddsketch.accept(sampled_value);
-//                uddsketch.accept(sampled_value_2);
-//                kllsketch.update((float) sampled_value);
-//                reqSketch.update((float) sampled_value);
-//                msketch.add(sampled_value);
-//            }
-//
-//            long endInsert = System.nanoTime();
-//
-//            long elapsedTimeInsert = endInsert - startInsert;
-//            System.out.println(sketchName);
-//            System.out.println("Insert time - nanos (" + sketchName + "): " + elapsedTimeInsert);
-//            System.out.println(
-//                "Insert time - micros (" + sketchName + "): " + TimeUnit.NANOSECONDS.toMicros(elapsedTimeInsert));
-//            System.out.println(
-//                "Insert time - millis (" + sketchName + "): " + TimeUnit.NANOSECONDS.toMillis(elapsedTimeInsert));
-//            if ("UDDSketch".equals(sketchName)) {
-//                System.out.println(uddsketch);
-//                System.out.println("Count:" + uddsketch.getCount());
-//                System.out.println(Arrays.toString(uddsketch.getValuesAtQuantiles(percentiles)));
-//            }
-//
-//            startInsert = System.nanoTime();
-//            ArrayList<Double> dal = new ArrayList<Double>();
-//
-//            for (int i = 0; i < dataSizeAdaptability; i++) {
-//                double sampled_value = binD.sample();
-//                double sampled_value_2 = gd.sample();
-//                dal.add(sampled_value);
-//                //all_data.add(sampled_value);
-//                //ddsketch.accept(sampled_value);
-//                //kllsketch.update((float) sampled_value);
-//                //kllsketch.update((float) sampled_value_2);
-//                momentSketch.add(sampled_value);
-//                momentSketch.add(sampled_value_2);
-//            }
-//
-//            Kurtosis kurtosis = new Kurtosis();
-//
-//            double[] target = new double[dal.size()];
-//            for (int i = 0; i < target.length; i++) {
-//                target[i] = dal.get(i);                // java 1.5+ style (outboxing)
-//            }
-//
-//            System.out.println("Kurtosis");
-//            System.out.println(kurtosis.evaluate(target));
-//
-//            endInsert = System.nanoTime();
-//
-//            elapsedTimeInsert = endInsert - startInsert;
-//
-//            System.out.println("Moments Sketch");
-//            System.out.println(elapsedTimeInsert);
-//            System.out.println(TimeUnit.NANOSECONDS.toMicros(elapsedTimeInsert));
-//            System.out.println(TimeUnit.NANOSECONDS.toMillis(elapsedTimeInsert));
-//
-//            startInsert = System.nanoTime();
-//
-//            for (int i = 0; i < dataSizeAdaptability; i++) {
-//                double sampled_value = binD.sample();
-//                double sampled_value_2 = gd.sample();
-//                //all_data.add(sampled_value);
-//                //ddsketch.accept(sampled_value);
-//                kllsketch.update((float) sampled_value);
-//                kllsketch.update((float) sampled_value_2);
-//            }
-//
-//            endInsert = System.nanoTime();
-//
-//            elapsedTimeInsert = endInsert - startInsert;
-//
-//            System.out.println("KLL Sketch");
-//            System.out.println(elapsedTimeInsert);
-//            System.out.println(TimeUnit.NANOSECONDS.toMicros(elapsedTimeInsert));
-//            System.out.println(TimeUnit.NANOSECONDS.toMillis(elapsedTimeInsert));
-//
-//            System.out.println(kllsketch.toString(true, false));
-//
-//            double[] percentilesAdaptability = {.05, .25, .50, .75, .90, .95, .98};
+            if (runMode == 4) {
+                System.out.println("======= Running adaptability tests with data size : " + dataSizeAdaptability + " x 2 =========");
+                long startInsert = System.nanoTime();
 
-            //double[] resultsDDSAdapt = ddsketch.getValuesAtQuantiles(percentilesAdaptability);
-            //float[] resultsKllAdapt = kllsketch.getQuantiles(percentilesAdaptability);
+                for (int i = 0; i < dataSizeAdaptability; i++) {
+                    double sampled_value = binD.sample();
+                    all_data.add(sampled_value);
+                    momentSketch.add(sampled_value);
+                    ddsketch.accept(sampled_value);
+                    kllsketch.update((float) sampled_value);
+                    reqSketch.update((float) sampled_value);
+                    uddsketch.accept(sampled_value);
+                }
 
-            //MomentSolver ms = new MomentSolver(msketch);
-            //ms.setGridSize(1024);
-            //ms.solve();
+                for (int i = 0; i < dataSizeAdaptability; i++) {
+                    double sampled_value_2 = unif_adapt_test.sample();
+                    all_data.add(sampled_value_2);
+                    momentSketch.add(sampled_value_2);
+                    ddsketch.accept(sampled_value_2);
+                    kllsketch.update((float) sampled_value_2);
+                    reqSketch.update((float) sampled_value_2);
+                    uddsketch.accept(sampled_value_2);
+                }
 
-            //double[] resultsMomentsAdapt = ms.getQuantiles(percentilesAdaptability);
+                long endInsert = System.nanoTime();
 
-            //ArrayList<Double> real_percentiles = getPercentiles(all_data, percentilesAdaptability);
+                long elapsedTimeInsert = endInsert - startInsert;
+                System.out.println("Insert time - nanos : " + elapsedTimeInsert);
+                System.out.println(
+                    "Insert time - micros : " + TimeUnit.NANOSECONDS.toMicros(elapsedTimeInsert));
+                System.out.println(
+                    "Insert time - millis : " + TimeUnit.NANOSECONDS.toMillis(elapsedTimeInsert));
 
-            //System.out.print(real_percentiles.get(0) + ", " + real_percentiles.get(1) + ", " +  real_percentiles.get(2) + ", " + real_percentiles.get(3) + ", " + real_percentiles.get(4) + ", " + real_percentiles.get(5) + ", " + real_percentiles.get(6) + "\n");
-            //System.out.print(round(resultsMomentsAdapt[0], 4) +  "," + round(resultsMomentsAdapt[1], 4) + "," + round(resultsMomentsAdapt[2], 4) + ", " + round(resultsMomentsAdapt[3], 4) + ", " + round(resultsMomentsAdapt[4], 4) + ", " + round(resultsMomentsAdapt[5], 4) + ", " + round(resultsMomentsAdapt[6], 4) + "\n");
-            //System.out.print(round(resultsDDSAdapt[0], 4) + ", " + round(resultsDDSAdapt[1], 4) + ", " + round(resultsDDSAdapt[2], 4) + ", " + round(resultsDDSAdapt[3], 4) + ", " + round(resultsDDSAdapt[4], 4) + ", " + round(resultsDDSAdapt[5], 4) + ", " + round(resultsDDSAdapt[6], 4) + "\n");
-            //System.out.print(round(resultsKllAdapt[0], 4) + ", " + round(resultsKllAdapt[1], 4) + ", " + round(resultsKllAdapt[2], 4) + ", " + round(resultsKllAdapt[3], 4) + ", " + round(resultsKllAdapt[4], 4) + ", " + round(resultsKllAdapt[5], 4) + ", " + round(resultsKllAdapt[6], 4) + "\n");
+                double[] percentilesAdaptability = {.05, .25, .50, .75, .90, .95, .98};
 
+                double[] resultsMomentsAdapt = momentSketch.getQuantiles(percentilesAdaptability);
+                double[] resultsDDSAdapt = ddsketch.getValuesAtQuantiles(percentilesAdaptability);
+                float[] resultsKllAdapt = kllsketch.getQuantiles(percentilesAdaptability);
+                float[] resultsReqAdapt = reqSketch.getQuantiles(percentilesAdaptability);
+                double[] resultsUDDSAdapt = uddsketch.getValuesAtQuantiles(percentilesAdaptability);
 
-            //FileWriter myWriter = new FileWriter("all_data.txt");
-            //for (Double datad: all_data){
-            //    myWriter.write(datad.toString() + "\n");
-            //}
-            // myWriter.close();
+                ArrayList<Double> realPercentiles = getPercentiles(all_data, percentilesAdaptability);
 
+                System.out.print(
+                    realPercentiles.get(0) + ", " + realPercentiles.get(1) + ", " + realPercentiles.get(2) + ", " +
+                        realPercentiles.get(3) + ", " + realPercentiles.get(4) + ", " + realPercentiles.get(5) +
+                        ", " + realPercentiles.get(6) + "\n");
+                System.out.print(round(resultsMomentsAdapt[0], 4) + "," + round(resultsMomentsAdapt[1], 4) + "," +
+                    round(resultsMomentsAdapt[2], 4) + ", " + round(resultsMomentsAdapt[3], 4) + ", " +
+                    round(resultsMomentsAdapt[4], 4) + ", " + round(resultsMomentsAdapt[5], 4) + ", " +
+                    round(resultsMomentsAdapt[6], 4) + "\n");
+                System.out.print(round(resultsDDSAdapt[0], 4) + ", " + round(resultsDDSAdapt[1], 4) + ", " +
+                    round(resultsDDSAdapt[2], 4) + ", " + round(resultsDDSAdapt[3], 4) + ", " +
+                    round(resultsDDSAdapt[4], 4) + ", " + round(resultsDDSAdapt[5], 4) + ", " +
+                    round(resultsDDSAdapt[6], 4) + "\n");
+                System.out.print(round(resultsKllAdapt[0], 4) + ", " + round(resultsKllAdapt[1], 4) + ", " +
+                    round(resultsKllAdapt[2], 4) + ", " + round(resultsKllAdapt[3], 4) + ", " +
+                    round(resultsKllAdapt[4], 4) + ", " + round(resultsKllAdapt[5], 4) + ", " +
+                    round(resultsKllAdapt[6], 4) + "\n");
+                System.out.print(round(resultsReqAdapt[0], 4) + ", " + round(resultsReqAdapt[1], 4) + ", " +
+                    round(resultsReqAdapt[2], 4) + ", " + round(resultsReqAdapt[3], 4) + ", " +
+                    round(resultsReqAdapt[4], 4) + ", " + round(resultsReqAdapt[5], 4) + ", " +
+                    round(resultsReqAdapt[6], 4) + "\n");
+                System.out.print(round(resultsUDDSAdapt[0], 4) + ", " + round(resultsUDDSAdapt[1], 4) + ", " +
+                    round(resultsUDDSAdapt[2], 4) + ", " + round(resultsUDDSAdapt[3], 4) + ", " +
+                    round(resultsUDDSAdapt[4], 4) + ", " + round(resultsUDDSAdapt[5], 4) + ", " +
+                    round(resultsUDDSAdapt[6], 4) + "\n");
+
+                FileWriter adaptabilityWriter = new FileWriter("adaptability_data.txt");
+                for (int i = 0; i < realPercentiles.size(); i++) {
+                    adaptabilityWriter.write(percentilesAdaptability[i] + "," +
+                        realPercentiles.get(i) + "," + resultsMomentsAdapt[i] + "," + resultsDDSAdapt[i] + "," +
+                        resultsKllAdapt[i] + "," + resultsReqAdapt[i] + "," + resultsUDDSAdapt[i]);
+                }
+                adaptabilityWriter.close();
+            }
             // End adaptability tests
             // *********************************
 
-            // Insertion tests
+            // Kurtosis test
+            if (runMode == 5) {
+                System.out.println("======= Running kurtosis tests with data size : " + dataSizeKurtosis + " =========");
 
+                ArrayList<Double> actualKurtosisData = new ArrayList<>();
+                double percentileOfInterest = 0.98;
+                FileWriter kurtosisWriter = new FileWriter("kurtosis_data.txt");
+
+                for (int i = 0; i < dataSizeKurtosis; i++) {
+                    double sampled_value = uD.sample();
+                    actualKurtosisData.add(sampled_value);
+                    momentSketch.add(sampled_value);
+                    ddsketch.accept(sampled_value);
+                    kllsketch.update((float) sampled_value);
+                    reqSketch.update((float) sampled_value);
+                    uddsketch.accept(sampled_value);
+                }
+
+                Kurtosis kurtosis = new Kurtosis();
+
+                double[] target = new double[actualKurtosisData.size()];
+                for (int i = 0; i < target.length; i++) {
+                    target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
+                }
+
+                double kurtosisVal = round(kurtosis.evaluate(target), 4);
+                System.out.println("Kurtosis (Uniform) : " + kurtosisVal);
+
+                Collections.sort(actualKurtosisData);
+                double realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                double momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                double ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                double kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                double reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                double uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                String resultString =
+                    "Uniform," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
+                        "," + uddsQ;
+                System.out.println(resultString);
+                kurtosisWriter.write(resultString + "\n");
+
+                ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                reqSketch =
+                    ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                        .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+                actualKurtosisData.clear();
+
+                for (int i = 0; i < dataSizeKurtosis; i++) {
+                    double sampled_value = ptoD.sample();
+                    actualKurtosisData.add(sampled_value);
+                    momentSketch.add(sampled_value);
+                    ddsketch.accept(sampled_value);
+                    kllsketch.update((float) sampled_value);
+                    reqSketch.update((float) sampled_value);
+                    uddsketch.accept(sampled_value);
+                }
+
+                kurtosis = new Kurtosis();
+
+                target = new double[actualKurtosisData.size()];
+                for (int i = 0; i < target.length; i++) {
+                    target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
+                }
+
+                kurtosisVal = round(kurtosis.evaluate(target), 4);
+                System.out.println("Kurtosis (Pareto) : " + kurtosisVal);
+
+                Collections.sort(actualKurtosisData);
+                realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                resultString =
+                    "Pareto," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
+                        "," + uddsQ;
+                System.out.println(resultString);
+                kurtosisWriter.write(resultString + "\n");
+
+                ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                reqSketch =
+                    ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                        .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+                actualKurtosisData.clear();
+
+                // Power dataset
+                String line;
+                String delimiterPowerDataset = ";";
+                BufferedReader brPower =
+                    new BufferedReader(
+                        new FileReader("/home/m34ferna/flink-benchmarks/household_power_consumption.txt"));
+                while ((line = brPower.readLine()) != null) {
+                    String[] line_array = line.split(delimiterPowerDataset);    // use comma as separator
+                    double globalActivePower = Double.parseDouble(line_array[2]);
+                    actualKurtosisData.add(globalActivePower);
+                    momentSketch.add(globalActivePower);
+                    ddsketch.accept(globalActivePower);
+                    kllsketch.update((float) globalActivePower);
+                    reqSketch.update((float) globalActivePower);
+                    uddsketch.accept(globalActivePower);
+                }
+
+                kurtosis = new Kurtosis();
+
+                target = new double[actualKurtosisData.size()];
+                for (int i = 0; i < target.length; i++) {
+                    target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
+                }
+
+                kurtosisVal = round(kurtosis.evaluate(target), 4);
+                System.out.println("Kurtosis (Power) : " + kurtosisVal);
+
+                Collections.sort(actualKurtosisData);
+                realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                resultString =
+                    "Power," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ + "," +
+                        uddsQ;
+                System.out.println(resultString);
+                kurtosisWriter.write(resultString + "\n");
+
+                ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                reqSketch =
+                    ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                        .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+                actualKurtosisData.clear();
+
+                // NYT dataset
+                String splitBy = ",";
+                BufferedReader brNYT =
+                    new BufferedReader(new FileReader("/home/m34ferna/flink-benchmarks/nyt-data.csv"));
+                while ((line = brNYT.readLine()) != null) {
+                    String[] line_array = line.split(splitBy);    // use comma as separator
+                    double totalAmount = Double.parseDouble(line_array[10]);
+                    actualKurtosisData.add(totalAmount);
+                    momentSketch.add(totalAmount);
+                    ddsketch.accept(totalAmount);
+                    kllsketch.update((float) totalAmount);
+                    reqSketch.update((float) totalAmount);
+                    uddsketch.accept(totalAmount);
+                }
+
+                kurtosis = new Kurtosis();
+
+                target = new double[actualKurtosisData.size()];
+                for (int i = 0; i < target.length; i++) {
+                    target[i] = actualKurtosisData.get(i);                // java 1.5+ style (outboxing)
+                }
+
+                kurtosisVal = round(kurtosis.evaluate(target), 4);
+                System.out.println("Kurtosis (NYT) : " + kurtosisVal);
+
+                Collections.sort(actualKurtosisData);
+                realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                resultString =
+                    "NYT," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ + "," +
+                        uddsQ;
+                System.out.println(resultString);
+                kurtosisWriter.write(resultString + "\n");
+
+                kurtosisWriter.close();
+            }
+
+            // Insertion tests
             if (runMode == 2) {
                 System.out.println("=========== Starting insert time tests ==============");
 
@@ -349,6 +477,7 @@ public class Quantiler {
                 calcPowerDatasetStats();
             }
 
+            // Query tests
             if (runMode == 1) {
                 ArrayList<Integer> dataSizes = new ArrayList<>(4);
                 dataSizes.add(10_000_000);
@@ -400,7 +529,7 @@ public class Quantiler {
 */
 
                     // Query time test
-                    for (int iter = 0; iter < 10; iter++) {
+                    for (int iter = 0; iter < 11; iter++) {
                         System.out.println(
                             "======== Starting query time tests for data size " + dataSize + " and iteration " +
                                 iter + "========");
@@ -500,6 +629,54 @@ public class Quantiler {
 
     }
 
+    private static void runUDDSTests() {
+        System.out.println("======= Running initial testing of sketches ===========");
+        int paramK = 12;
+        double alphaZero =
+            Math.tanh(FastMath.atanh(0.001) / Math.pow(2.0, paramK - 1));
+        System.out.println("Alpha zero: " + alphaZero);
+        DDSketch ex_dds = new DDSketch(0.01);
+        UniformDDSketch ex_udds = new UniformDDSketch(1024, alphaZero);
+
+        double[] example_data = {1, 2, 3, 4, 5, 6, 7, 18, 30, 51, 10002412, 123.01123333};
+        for (int i = 0; i < example_data.length; i++) {
+            ex_dds.accept(example_data[i]);
+            ex_udds.accept(example_data[i]);
+        }
+
+        double[] ex_quantiles = {0.8, 0.9, 0.95, 0.98, 0.99};
+
+        System.out.println("Example data output");
+        System.out.println("DDSketch: " + ex_dds.getValuesAtQuantiles(ex_quantiles)[0]);
+        System.out.println("DDSketch: " + ex_dds.getValuesAtQuantiles(ex_quantiles)[1]);
+        System.out.println("UDDSketch: " + ex_udds.getValuesAtQuantiles(ex_quantiles)[0]);
+        System.out.println("UDDSketch: " + ex_udds.getValuesAtQuantiles(ex_quantiles)[1]);
+
+        ex_dds = new DDSketch(0.01);
+        ex_udds = new UniformDDSketch(1024, alphaZero);
+
+        ParetoDistribution ptoD = new ParetoDistribution(1, 1);
+        System.out.println("Pareto mean: " + ptoD.getNumericalMean());
+
+        ArrayList<Double> actualValues = new ArrayList<>();
+        for (int i = 0; i < 1_000_000; i++) {
+            double sampled_value = ptoD.sample();
+            actualValues.add(sampled_value);
+            ex_dds.accept(sampled_value);
+            ex_udds.accept(sampled_value);
+        }
+
+        System.out.println("Pareto data output");
+        ArrayList<Double> actualQuantiles = getPercentiles(actualValues, ex_quantiles);
+        System.out.println("Actual:" + actualQuantiles);
+        System.out.println("DDSketch: " + Arrays.toString(ex_dds.getValuesAtQuantiles(ex_quantiles)));
+        System.out.println("UDDSketch: " + Arrays.toString(ex_udds.getValuesAtQuantiles(ex_quantiles)));
+
+        System.out.println("======= End UDDS testing ===========");
+        System.out.println(ex_udds);
+        System.exit(0);
+    }
+
     private static void runKTests() {
         System.out.println("Get K");
         System.out.println(KllFloatsSketch.getKFromEpsilon(0.01, true));
@@ -513,16 +690,13 @@ public class Quantiler {
         String delimiterPowerDataset = ";";
         BufferedReader br =
             new BufferedReader(new FileReader("/home/m34ferna/flink-benchmarks/household_power_consumption.txt"));
-        ArrayList<Double> valuesRead = new ArrayList<Double>();
+        ArrayList<Double> valuesRead = new ArrayList<>();
         while ((line = br.readLine()) != null) {
             String[] line_array = line.split(delimiterPowerDataset);    // use comma as separator
             double globalActivePower = Double.parseDouble(line_array[2]);
             valuesRead.add(globalActivePower);
-
             //ddsketch.accept(d);
-
             //kllsketch.update(d;
-
             //msketch.add(d);
         }
 
@@ -533,12 +707,10 @@ public class Quantiler {
 
     private static void calcNYTDatasetStats() throws IOException {
         /* NYT FARES GENERATOR */
-        String line = "";
+        String line;
         String splitBy = ",";
         BufferedReader br = new BufferedReader(new FileReader("/home/m34ferna/flink-benchmarks/nyt-data.csv"));
-        ArrayList<Double> valuesRead = new ArrayList<Double>();
-        double min = 0;
-        double max = 0;
+        ArrayList<Double> valuesRead = new ArrayList<>();
         while ((line = br.readLine()) != null) {
             String[] line_array = line.split(splitBy);    // use comma as separator
             double totalAmount = Double.parseDouble(line_array[10]);
@@ -650,8 +822,8 @@ public class Quantiler {
             long elapsedTimeMergeNanos = endMerge - startMerge;
             long elapsedTimeMergeMicros = TimeUnit.NANOSECONDS.toMicros(elapsedTimeMergeNanos);
             System.out.println(
-                "MomentsSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeMergeMicros);
-            System.out.println("MomentsSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeMergeNanos);
+                "MomentsSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
+            System.out.println("MomentsSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[0] = elapsedTimeMergeMicros;
 
             startMerge = System.nanoTime();
@@ -665,8 +837,8 @@ public class Quantiler {
             elapsedTimeMergeNanos = endMerge - startMerge;
             elapsedTimeMergeMicros = TimeUnit.NANOSECONDS.toMicros(elapsedTimeMergeNanos);
             System.out.println(
-                "DDSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeMergeMicros);
-            System.out.println("DDSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeMergeNanos);
+                "DDSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
+            System.out.println("DDSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[1] = elapsedTimeMergeMicros;
 
             startMerge = System.nanoTime();
@@ -679,8 +851,8 @@ public class Quantiler {
             elapsedTimeMergeNanos = endMerge - startMerge;
             elapsedTimeMergeMicros = TimeUnit.NANOSECONDS.toMicros(elapsedTimeMergeNanos);
             System.out.println(
-                "KLLSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeMergeMicros);
-            System.out.println("KLLSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeMergeNanos);
+                "KLLSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
+            System.out.println("KLLSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[2] = elapsedTimeMergeMicros;
 
             startMerge = System.nanoTime();
@@ -693,8 +865,8 @@ public class Quantiler {
             elapsedTimeMergeNanos = endMerge - startMerge;
             elapsedTimeMergeMicros = TimeUnit.NANOSECONDS.toMicros(elapsedTimeMergeNanos);
             System.out.println(
-                "REQSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeMergeMicros);
-            System.out.println("REQSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeMergeNanos);
+                "REQSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
+            System.out.println("REQSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[3] = elapsedTimeMergeMicros;
 
             startMerge = System.nanoTime();
@@ -707,11 +879,11 @@ public class Quantiler {
             elapsedTimeMergeNanos = endMerge - startMerge;
             elapsedTimeMergeMicros = TimeUnit.NANOSECONDS.toMicros(elapsedTimeMergeNanos);
             System.out.println(
-                "UDDSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeMergeMicros);
-            System.out.println("UDDSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeMergeNanos);
+                "UDDSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
+            System.out.println("UDDSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[4] = elapsedTimeMergeMicros;
 
-            mergeWriter.write(dataSize + "," + Arrays.toString(mergeResults) + "\n");
+            mergeWriter.write(numSketches + "," + Arrays.toString(mergeResults) + "\n");
         }
         mergeWriter.close();
     }
@@ -758,7 +930,7 @@ public class Quantiler {
     }
 
     public static ArrayList<Double> getPercentiles(ArrayList<Double> all_events, double[] percentiles) {
-        ArrayList<Double> ret_list = new ArrayList<Double>();
+        ArrayList<Double> ret_list = new ArrayList<>();
         Collections.sort(all_events);
         for (double p : percentiles) {
             ret_list.add(round(percentile(all_events, p), 4));
