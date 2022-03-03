@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 public class Quantiler {
 
     public static final int KLL_PARAM_K = 350;
-    public static final int MOMEMNTS_PARAM_K = 10;
+    public static final int MOMEMNTS_PARAM_K = 12;
     public static final int UDDS_PARAM_MAX_NUM_BUCKETS = 1024;
     public static final int UDDS_PARAM_K = 12;
     public static final double DDS_PARAM_RELATIVE_ACCURACY = 0.01;
