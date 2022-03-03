@@ -96,7 +96,8 @@ public class Quantiler {
             // *********************************
             // Adaptability tests
             if (runMode == 4) {
-                System.out.println("======= Running adaptability tests with data size : " + dataSizeAdaptability + " x 2 =========");
+                System.out.println(
+                    "======= Running adaptability tests with data size : " + dataSizeAdaptability + " x 2 =========");
                 long startInsert = System.nanoTime();
 
                 for (int i = 0; i < dataSizeAdaptability; i++) {
@@ -138,27 +139,30 @@ public class Quantiler {
 
                 ArrayList<Double> realPercentiles = getPercentiles(all_data, percentilesAdaptability);
 
+                System.out.println("Results for percentiles: " + Arrays.toString(percentiles));
                 System.out.print(
-                    realPercentiles.get(0) + ", " + realPercentiles.get(1) + ", " + realPercentiles.get(2) + ", " +
+                    "Real:" + realPercentiles.get(0) + ", " + realPercentiles.get(1) + ", " + realPercentiles.get(2) +
+                        ", " +
                         realPercentiles.get(3) + ", " + realPercentiles.get(4) + ", " + realPercentiles.get(5) +
                         ", " + realPercentiles.get(6) + "\n");
-                System.out.print(round(resultsMomentsAdapt[0], 4) + "," + round(resultsMomentsAdapt[1], 4) + "," +
-                    round(resultsMomentsAdapt[2], 4) + ", " + round(resultsMomentsAdapt[3], 4) + ", " +
-                    round(resultsMomentsAdapt[4], 4) + ", " + round(resultsMomentsAdapt[5], 4) + ", " +
-                    round(resultsMomentsAdapt[6], 4) + "\n");
-                System.out.print(round(resultsDDSAdapt[0], 4) + ", " + round(resultsDDSAdapt[1], 4) + ", " +
+                System.out.print(
+                    "Moments:" + round(resultsMomentsAdapt[0], 4) + "," + round(resultsMomentsAdapt[1], 4) + "," +
+                        round(resultsMomentsAdapt[2], 4) + ", " + round(resultsMomentsAdapt[3], 4) + ", " +
+                        round(resultsMomentsAdapt[4], 4) + ", " + round(resultsMomentsAdapt[5], 4) + ", " +
+                        round(resultsMomentsAdapt[6], 4) + "\n");
+                System.out.print("DDS:" + round(resultsDDSAdapt[0], 4) + ", " + round(resultsDDSAdapt[1], 4) + ", " +
                     round(resultsDDSAdapt[2], 4) + ", " + round(resultsDDSAdapt[3], 4) + ", " +
                     round(resultsDDSAdapt[4], 4) + ", " + round(resultsDDSAdapt[5], 4) + ", " +
                     round(resultsDDSAdapt[6], 4) + "\n");
-                System.out.print(round(resultsKllAdapt[0], 4) + ", " + round(resultsKllAdapt[1], 4) + ", " +
+                System.out.print("KLL:" + round(resultsKllAdapt[0], 4) + ", " + round(resultsKllAdapt[1], 4) + ", " +
                     round(resultsKllAdapt[2], 4) + ", " + round(resultsKllAdapt[3], 4) + ", " +
                     round(resultsKllAdapt[4], 4) + ", " + round(resultsKllAdapt[5], 4) + ", " +
                     round(resultsKllAdapt[6], 4) + "\n");
-                System.out.print(round(resultsReqAdapt[0], 4) + ", " + round(resultsReqAdapt[1], 4) + ", " +
+                System.out.print("REQ:" + round(resultsReqAdapt[0], 4) + ", " + round(resultsReqAdapt[1], 4) + ", " +
                     round(resultsReqAdapt[2], 4) + ", " + round(resultsReqAdapt[3], 4) + ", " +
                     round(resultsReqAdapt[4], 4) + ", " + round(resultsReqAdapt[5], 4) + ", " +
                     round(resultsReqAdapt[6], 4) + "\n");
-                System.out.print(round(resultsUDDSAdapt[0], 4) + ", " + round(resultsUDDSAdapt[1], 4) + ", " +
+                System.out.print("UDDS:" + round(resultsUDDSAdapt[0], 4) + ", " + round(resultsUDDSAdapt[1], 4) + ", " +
                     round(resultsUDDSAdapt[2], 4) + ", " + round(resultsUDDSAdapt[3], 4) + ", " +
                     round(resultsUDDSAdapt[4], 4) + ", " + round(resultsUDDSAdapt[5], 4) + ", " +
                     round(resultsUDDSAdapt[6], 4) + "\n");
@@ -167,16 +171,18 @@ public class Quantiler {
                 for (int i = 0; i < realPercentiles.size(); i++) {
                     adaptabilityWriter.write(percentilesAdaptability[i] + "," +
                         realPercentiles.get(i) + "," + resultsMomentsAdapt[i] + "," + resultsDDSAdapt[i] + "," +
-                        resultsKllAdapt[i] + "," + resultsReqAdapt[i] + "," + resultsUDDSAdapt[i]);
+                        resultsKllAdapt[i] + "," + resultsReqAdapt[i] + "," + resultsUDDSAdapt[i] + "\n");
                 }
                 adaptabilityWriter.close();
+                System.out.println("======== End of adaptability tests ========");
             }
             // End adaptability tests
             // *********************************
 
             // Kurtosis test
             if (runMode == 5) {
-                System.out.println("======= Running kurtosis tests with data size : " + dataSizeKurtosis + " =========");
+                System.out.println(
+                    "======= Running kurtosis tests with data size : " + dataSizeKurtosis + " =========");
 
                 ArrayList<Double> actualKurtosisData = new ArrayList<>();
                 double percentileOfInterest = 0.98;
