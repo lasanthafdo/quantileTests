@@ -73,8 +73,8 @@ public class Quantiler {
             }
 
 
-            int dataSizeAdaptability = 500000;
-            int dataSizeKurtosis = 1000000;
+            int dataSizeAdaptability = 1_000_000;
+            int dataSizeKurtosis = 1_000_000;
             ArrayList<Double> all_data = new ArrayList<>();
 
             // Synthetic Workloads
