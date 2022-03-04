@@ -785,8 +785,8 @@ public class Quantiler {
                 "======== Starting merge tests for data size " + dataSize + " with " +
                     numSketches + " sketches ========");
             UniformRealDistribution uD2 = new UniformRealDistribution(1, 5000);
-            NormalDistribution valnD2 = new NormalDistribution(100, 15);
-            BinomialDistribution ptoD2 = new BinomialDistribution(100, 0.2);
+            BinomialDistribution binD2 = new BinomialDistribution(100, 0.2);
+            ZipfDistribution zipD2 = new ZipfDistribution(20, 0.6);
 
             ArrayList<DDSketch> ddSketches = new ArrayList<>();
             ArrayList<KllFloatsSketch> kllFloatsSketches = new ArrayList<>();
@@ -834,7 +834,7 @@ public class Quantiler {
                 }
                 if ((k % 3) == 1) {
                     for (int j = 0; j < dataSize; j++) {
-                        double sampled_value = valnD2.sample();
+                        double sampled_value = binD2.sample();
                         ds.accept(sampled_value);
                         kll.update((float) sampled_value);
                         msketch.add(sampled_value);
@@ -844,7 +844,7 @@ public class Quantiler {
                 }
                 if ((k % 3) == 2) {
                     for (int j = 0; j < dataSize; j++) {
-                        double sampled_value = ptoD2.sample();
+                        double sampled_value = zipD2.sample();
                         ds.accept(sampled_value);
                         kll.update((float) sampled_value);
                         msketch.add(sampled_value);
