@@ -1,4 +1,6 @@
 import com.datadoghq.sketch.ddsketch.DDSketch;
+import com.datadoghq.sketch.ddsketch.mapping.LogarithmicMapping;
+import com.datadoghq.sketch.ddsketch.store.CollapsingLowestDenseStore;
 import com.datadoghq.sketch.uddsketch.UniformDDSketch;
 import com.github.stanfordfuturedata.momentsketch.SimpleMomentSketch;
 import org.apache.commons.math3.distribution.*;
@@ -44,6 +46,8 @@ public class Quantiler {
 
             // Sketch Algorithms
             DDSketch ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+            DDSketch ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
             UniformDDSketch uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
             KllFloatsSketch kllsketch = new KllFloatsSketch(KLL_PARAM_K);
             SimpleMomentSketch momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
@@ -67,8 +71,8 @@ public class Quantiler {
             if (runMode == 3) {
                 ArrayList<Integer> numSketchesList = new ArrayList<>();
                 numSketchesList.add(10);
-//                numSketchesList.add(100);
-//                numSketchesList.add(1000);
+                numSketchesList.add(100);
+                numSketchesList.add(1000);
                 runMergeTests(dataSizeMerge, numSketchesList);
             }
 
@@ -108,6 +112,7 @@ public class Quantiler {
                     all_data.add(sampled_value);
                     momentSketch.add(sampled_value);
                     ddsketch.accept(sampled_value);
+                    ddSketchCollapsing.accept(sampled_value);
                     kllsketch.update((float) sampled_value);
                     reqSketch.update((float) sampled_value);
                     uddsketch.accept(sampled_value);
@@ -118,6 +123,7 @@ public class Quantiler {
                     all_data.add(sampled_value_2);
                     momentSketch.add(sampled_value_2);
                     ddsketch.accept(sampled_value_2);
+                    ddSketchCollapsing.accept(sampled_value_2);
                     kllsketch.update((float) sampled_value_2);
                     reqSketch.update((float) sampled_value_2);
                     uddsketch.accept(sampled_value_2);
@@ -132,10 +138,11 @@ public class Quantiler {
                 System.out.println(
                     "Insert time - millis : " + TimeUnit.NANOSECONDS.toMillis(elapsedTimeInsert));
 
-                double[] percentilesAdaptability = {.05, .25, .50, .75, .90, .95, .98};
+                double[] percentilesAdaptability = {.01, .05, .25, .50, .75, .90, .95, .98, .99};
 
                 double[] resultsMomentsAdapt = momentSketch.getQuantiles(percentilesAdaptability);
                 double[] resultsDDSAdapt = ddsketch.getValuesAtQuantiles(percentilesAdaptability);
+                double[] resultsDDSCollapsingAdapt = ddSketchCollapsing.getValuesAtQuantiles(percentilesAdaptability);
                 float[] resultsKllAdapt = kllsketch.getQuantiles(percentilesAdaptability);
                 float[] resultsReqAdapt = reqSketch.getQuantiles(percentilesAdaptability);
                 double[] resultsUDDSAdapt = uddsketch.getValuesAtQuantiles(percentilesAdaptability);
@@ -157,6 +164,12 @@ public class Quantiler {
                     round(resultsDDSAdapt[2], 4) + ", " + round(resultsDDSAdapt[3], 4) + ", " +
                     round(resultsDDSAdapt[4], 4) + ", " + round(resultsDDSAdapt[5], 4) + ", " +
                     round(resultsDDSAdapt[6], 4) + "\n");
+                System.out.print(
+                    "DDSC:" + round(resultsDDSCollapsingAdapt[0], 4) + ", " + round(resultsDDSCollapsingAdapt[1], 4) +
+                        ", " +
+                        round(resultsDDSCollapsingAdapt[2], 4) + ", " + round(resultsDDSCollapsingAdapt[3], 4) + ", " +
+                        round(resultsDDSCollapsingAdapt[4], 4) + ", " + round(resultsDDSCollapsingAdapt[5], 4) + ", " +
+                        round(resultsDDSCollapsingAdapt[6], 4) + "\n");
                 System.out.print("KLL:" + round(resultsKllAdapt[0], 4) + ", " + round(resultsKllAdapt[1], 4) + ", " +
                     round(resultsKllAdapt[2], 4) + ", " + round(resultsKllAdapt[3], 4) + ", " +
                     round(resultsKllAdapt[4], 4) + ", " + round(resultsKllAdapt[5], 4) + ", " +
@@ -174,7 +187,8 @@ public class Quantiler {
                 for (int i = 0; i < realPercentiles.size(); i++) {
                     adaptabilityWriter.write(percentilesAdaptability[i] + "," +
                         realPercentiles.get(i) + "," + resultsMomentsAdapt[i] + "," + resultsDDSAdapt[i] + "," +
-                        resultsKllAdapt[i] + "," + resultsReqAdapt[i] + "," + resultsUDDSAdapt[i] + "\n");
+                        resultsDDSCollapsingAdapt[i] + "," + resultsKllAdapt[i] + "," + resultsReqAdapt[i] + "," +
+                        resultsUDDSAdapt[i] + "\n");
                 }
                 adaptabilityWriter.close();
                 System.out.println("======== End of adaptability tests ========");
@@ -196,6 +210,7 @@ public class Quantiler {
                     actualKurtosisData.add(sampled_value);
                     momentSketch.add(sampled_value);
                     ddsketch.accept(sampled_value);
+                    ddSketchCollapsing.accept(sampled_value);
                     kllsketch.update((float) sampled_value);
                     reqSketch.update((float) sampled_value);
                     uddsketch.accept(sampled_value);
@@ -215,16 +230,19 @@ public class Quantiler {
                 double realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
                 double momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
                 double ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                double ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
                 double kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
                 double reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
                 double uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
                 String resultString =
-                    "Uniform," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
-                        "," + uddsQ;
+                    "Uniform," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
+                        "," + reqQ + "," + uddsQ;
                 System.out.println(resultString);
                 kurtosisWriter.write(resultString + "\n");
 
                 ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                    () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
                 uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                 kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                 momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
@@ -239,6 +257,7 @@ public class Quantiler {
                     actualKurtosisData.add(sampled_value);
                     momentSketch.add(sampled_value);
                     ddsketch.accept(sampled_value);
+                    ddSketchCollapsing.accept(sampled_value);
                     kllsketch.update((float) sampled_value);
                     reqSketch.update((float) sampled_value);
                     uddsketch.accept(sampled_value);
@@ -258,12 +277,13 @@ public class Quantiler {
                 realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
                 momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
                 ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
                 kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
                 reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
                 uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
                 resultString =
-                    "Pareto," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
-                        "," + uddsQ;
+                    "Pareto," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
+                        "," + reqQ + "," + uddsQ;
                 System.out.println(resultString);
                 kurtosisWriter.write(resultString + "\n");
 
@@ -271,6 +291,8 @@ public class Quantiler {
                 String line;
                 if (RUN_KURT_POWER) {
                     ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                    ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                        () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
                     uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                     kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                     momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
@@ -290,6 +312,7 @@ public class Quantiler {
                         actualKurtosisData.add(globalActivePower);
                         momentSketch.add(globalActivePower);
                         ddsketch.accept(globalActivePower);
+                        ddSketchCollapsing.accept(globalActivePower);
                         kllsketch.update((float) globalActivePower);
                         reqSketch.update((float) globalActivePower);
                         uddsketch.accept(globalActivePower);
@@ -309,19 +332,21 @@ public class Quantiler {
                     realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
                     momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
                     ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
                     kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
                     reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
                     uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
                     resultString =
-                        "Power," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
-                            "," +
-                            uddsQ;
+                        "Power," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
+                            "," + reqQ + "," + uddsQ;
                     System.out.println(resultString);
                     kurtosisWriter.write(resultString + "\n");
                 }
 
                 if (RUN_KURT_NYT) {
                     ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                    ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                        () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
                     uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                     kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                     momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
@@ -341,6 +366,7 @@ public class Quantiler {
                         actualKurtosisData.add(totalAmount);
                         momentSketch.add(totalAmount);
                         ddsketch.accept(totalAmount);
+                        ddSketchCollapsing.accept(totalAmount);
                         kllsketch.update((float) totalAmount);
                         reqSketch.update((float) totalAmount);
                         uddsketch.accept(totalAmount);
@@ -360,13 +386,13 @@ public class Quantiler {
                     realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
                     momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
                     ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
                     kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
                     reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
                     uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
                     resultString =
-                        "NYT," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + kllQ + "," + reqQ +
-                            "," +
-                            uddsQ;
+                        "NYT," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
+                            "," + reqQ + "," + uddsQ;
                     System.out.println(resultString);
                     kurtosisWriter.write(resultString + "\n");
                 }
@@ -498,6 +524,10 @@ public class Quantiler {
             // Query tests
             if (runMode == 1) {
                 ArrayList<Integer> dataSizes = new ArrayList<>(4);
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
                 dataSizes.add(10_000_000);
                 dataSizes.add(1_000_000);
                 dataSizes.add(10_000_000);
