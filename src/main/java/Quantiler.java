@@ -524,14 +524,30 @@ public class Quantiler {
             // Query tests
             if (runMode == 1) {
                 ArrayList<Integer> dataSizes = new ArrayList<>(4);
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
+
+                dataSizes.add(1_000_000_000);
+                dataSizes.add(1_000_000_000);
+
                 dataSizes.add(1_000_000);
+                dataSizes.add(1_000_000);
+                dataSizes.add(1_000_000);
+                dataSizes.add(1_000_000);
+                dataSizes.add(1_000_000);
+
                 dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+
                 dataSizes.add(100_000_000);
+                dataSizes.add(100_000_000);
+                dataSizes.add(100_000_000);
+                dataSizes.add(100_000_000);
+                dataSizes.add(100_000_000);
+
+                dataSizes.add(1_000_000_000);
+                dataSizes.add(1_000_000_000);
                 dataSizes.add(1_000_000_000);
 
                 FileWriter myWriter = new FileWriter("query_times.txt");
@@ -549,7 +565,7 @@ public class Quantiler {
                     /* PARETO GENERATOR
                      */
                     for (int i = 0; i < dataSize; i++) {
-                        double sampled_value = ptoD.sample();
+                        double sampled_value = uD.sample();
                         ddsketch.accept(sampled_value);
                         kllsketch.update((float) sampled_value);
                         momentSketch.add(sampled_value);
@@ -577,7 +593,7 @@ public class Quantiler {
 */
 
                     // Query time test
-                    for (int iter = 0; iter < 11; iter++) {
+                    for (int iter = 0; iter < 1; iter++) {
                         System.out.println(
                             "======== Starting query time tests for data size " + dataSize + " and iteration " +
                                 iter + "========");
@@ -609,6 +625,7 @@ public class Quantiler {
                         System.out.println(
                             "DDSketch - Query time [" + dataSize + "] (micros): " + elapsedTimeMicros);
                         System.out.println("DDSketch - Query time [" + dataSize + "] (nanos): " + elapsedTimeNanos);
+                        System.out.println("Max: " + ddsketch.getMaxValue() + ", Min: " + ddsketch.getMinValue());
                         queryResults[1] = elapsedTimeMicros;
 
                         // KLL
@@ -651,6 +668,7 @@ public class Quantiler {
                         System.out.println(
                             "UDDSketch - Query time [" + dataSize + "] (micros): " + elapsedTimeMicros);
                         System.out.println("UDDSketch - Query time [" + dataSize + "] (nanos): " + elapsedTimeNanos);
+                        System.out.println(uddsketch);
                         queryResults[4] = elapsedTimeMicros;
 
                         if (PRINT_QUERY_RESULTS) {
