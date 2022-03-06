@@ -522,33 +522,37 @@ public class Quantiler {
             }
 
             // Query tests
-            if (runMode == 1) {
+            if (runMode == 1 || runMode == 6) {
                 ArrayList<Integer> dataSizes = new ArrayList<>(4);
 
-                dataSizes.add(1_000_000_000);
-                dataSizes.add(1_000_000_000);
+                int numOneMilIters = 1000;
+                for (int i = 0; i < numOneMilIters; i++) {
+                    dataSizes.add(1_000_000);
+                }
 
-                dataSizes.add(1_000_000);
-                dataSizes.add(1_000_000);
-                dataSizes.add(1_000_000);
-                dataSizes.add(1_000_000);
-                dataSizes.add(1_000_000);
+                int numTenMilIters = 100;
+                for (int i = 0; i < numTenMilIters; i++) {
+                    dataSizes.add(10_000_000);
+                }
 
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
-                dataSizes.add(10_000_000);
+                int numHundredMilIters = 20;
+                for (int i = 0; i < numHundredMilIters; i++) {
+                    dataSizes.add(100_000_000);
+                }
 
-                dataSizes.add(100_000_000);
-                dataSizes.add(100_000_000);
-                dataSizes.add(100_000_000);
-                dataSizes.add(100_000_000);
-                dataSizes.add(100_000_000);
+                int numThousandMilIters = 5;
+                for (int i = 0; i < numThousandMilIters; i++) {
+                    dataSizes.add(1_000_000_000);
+                }
 
-                dataSizes.add(1_000_000_000);
-                dataSizes.add(1_000_000_000);
-                dataSizes.add(1_000_000_000);
+                if (runMode == 6) {
+                    Collections.reverse(dataSizes);
+                }
+
+                int itersForWarmUp = 2;
+                for (int i = 0; i < itersForWarmUp; i++) {
+                    dataSizes.add(0, 1_000_000_000);
+                }
 
                 FileWriter myWriter = new FileWriter("query_times.txt");
 
