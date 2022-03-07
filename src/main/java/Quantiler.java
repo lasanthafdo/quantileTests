@@ -232,7 +232,7 @@ public class Quantiler {
                 for (int i = 0; i < dataSizeKurtosis; i++) {
                     double sampled_value = uD.sample();
                     actualKurtosisData.add(sampled_value);
-                    momentSketch.add(Math.log(sampled_value));
+                    momentSketch.add(sampled_value);
                     ddsketch.accept(sampled_value);
                     ddSketchCollapsing.accept(sampled_value);
                     kllsketch.update((float) sampled_value);
@@ -252,7 +252,7 @@ public class Quantiler {
 
                 Collections.sort(actualKurtosisData);
                 double realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                double momentsQ = round(Math.exp(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0]), 4);
+                double momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
                 double ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
                 double ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
                 double kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
@@ -388,7 +388,7 @@ public class Quantiler {
                         String[] line_array = line.split(splitBy);    // use comma as separator
                         double totalAmount = Double.parseDouble(line_array[10]);
                         actualKurtosisData.add(totalAmount);
-                        momentSketch.add(Math.log(totalAmount));
+                        momentSketch.add(totalAmount);
                         ddsketch.accept(totalAmount);
                         ddSketchCollapsing.accept(totalAmount);
                         kllsketch.update((float) totalAmount);
@@ -408,7 +408,7 @@ public class Quantiler {
 
                     Collections.sort(actualKurtosisData);
                     realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                    momentsQ = round(Math.exp(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0]), 4);
+                    momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
                     ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
                     ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
                     kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
