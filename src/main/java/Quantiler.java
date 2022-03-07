@@ -227,17 +227,15 @@ public class Quantiler {
 
                 ArrayList<Double> actualKurtosisData = new ArrayList<>();
                 double percentileOfInterest = 0.98;
+                int numIters = 6;
+                double realQ, momentsQ, ddsQ, ddscQ, kllQ, reqQ, uddsQ;
+                String resultString;
                 FileWriter kurtosisWriter = new FileWriter("kurtosis_data.txt");
 
+                // Uniform
                 for (int i = 0; i < dataSizeKurtosis; i++) {
                     double sampled_value = uD.sample();
                     actualKurtosisData.add(sampled_value);
-                    momentSketch.add(sampled_value);
-                    ddsketch.accept(sampled_value);
-                    ddSketchCollapsing.accept(sampled_value);
-                    kllsketch.update((float) sampled_value);
-                    reqSketch.update((float) sampled_value);
-                    uddsketch.accept(sampled_value);
                 }
 
                 Kurtosis kurtosis = new Kurtosis();
@@ -250,41 +248,50 @@ public class Quantiler {
                 double kurtosisVal = round(kurtosis.evaluate(target), 4);
                 System.out.println("Kurtosis (Uniform) : " + kurtosisVal);
 
-                Collections.sort(actualKurtosisData);
-                double realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                double momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
-                double ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                double ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
-                double kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
-                double reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
-                double uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                String resultString =
-                    "Uniform," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
-                        "," + reqQ + "," + uddsQ;
-                System.out.println(resultString);
-                kurtosisWriter.write(resultString + "\n");
+                for (int iter = 0; iter < numIters; iter++) {
+                    ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                    ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                        () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
+                    uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                    kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                    momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                    momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
+                    reqSketch =
+                        ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                            .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
 
-                ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
-                ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
-                    () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
-                uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
-                kllsketch = new KllFloatsSketch(KLL_PARAM_K);
-                momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-                momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
-                reqSketch =
-                    ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
-                        .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+                    for (int i = 0; i < dataSizeKurtosis; i++) {
+                        double sampledValue = actualKurtosisData.get(i);
+                        momentSketch.add(sampledValue);
+                        ddsketch.accept(sampledValue);
+                        ddSketchCollapsing.accept(sampledValue);
+                        kllsketch.update((float) sampledValue);
+                        reqSketch.update((float) sampledValue);
+                        uddsketch.accept(sampledValue);
+                    }
+
+                    Collections.sort(actualKurtosisData);
+                    realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                    momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                    ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
+                    kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                    reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                    uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    resultString =
+                        "Uniform," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," +
+                            kllQ +
+                            "," + reqQ + "," + uddsQ;
+                    System.out.println(resultString);
+                    kurtosisWriter.write(resultString + "\n");
+                }
+
+                // Pareto
                 actualKurtosisData.clear();
 
                 for (int i = 0; i < dataSizeKurtosis; i++) {
                     double sampled_value = ptoD.sample();
                     actualKurtosisData.add(sampled_value);
-                    momentSketch.add(Math.log(sampled_value));
-                    ddsketch.accept(sampled_value);
-                    ddSketchCollapsing.accept(sampled_value);
-                    kllsketch.update((float) sampled_value);
-                    reqSketch.update((float) sampled_value);
-                    uddsketch.accept(sampled_value);
                 }
 
                 kurtosis = new Kurtosis();
@@ -297,23 +304,7 @@ public class Quantiler {
                 kurtosisVal = round(kurtosis.evaluate(target), 4);
                 System.out.println("Kurtosis (Pareto) : " + kurtosisVal);
 
-                Collections.sort(actualKurtosisData);
-                realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                momentsQ = round(Math.exp(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0]), 4);
-                ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
-                kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
-                reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
-                uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                resultString =
-                    "Pareto," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
-                        "," + reqQ + "," + uddsQ;
-                System.out.println(resultString);
-                kurtosisWriter.write(resultString + "\n");
-
-                // Power dataset
-                String line;
-                if (RUN_KURT_POWER) {
+                for (int iter = 0; iter < numIters; iter++) {
                     ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
                     ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
                         () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
@@ -324,6 +315,35 @@ public class Quantiler {
                     reqSketch =
                         ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                             .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+
+                    for (int i = 0; i < dataSizeKurtosis; i++) {
+                        double sampledValue = actualKurtosisData.get(i);
+                        momentSketch.add(Math.log(sampledValue));
+                        ddsketch.accept(sampledValue);
+                        ddSketchCollapsing.accept(sampledValue);
+                        kllsketch.update((float) sampledValue);
+                        reqSketch.update((float) sampledValue);
+                        uddsketch.accept(sampledValue);
+                    }
+
+                    Collections.sort(actualKurtosisData);
+                    realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                    momentsQ = round(Math.exp(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0]), 4);
+                    ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
+                    kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                    reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                    uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                    resultString =
+                        "Pareto," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
+                            "," + reqQ + "," + uddsQ;
+                    System.out.println(resultString);
+                    kurtosisWriter.write(resultString + "\n");
+                }
+
+                // Power dataset
+                String line;
+                if (RUN_KURT_POWER) {
                     actualKurtosisData.clear();
 
                     String delimiterPowerDataset = ";";
@@ -334,12 +354,6 @@ public class Quantiler {
                         String[] line_array = line.split(delimiterPowerDataset);    // use comma as separator
                         double globalActivePower = Double.parseDouble(line_array[2]);
                         actualKurtosisData.add(globalActivePower);
-                        momentSketch.add(Math.log(globalActivePower));
-                        ddsketch.accept(globalActivePower);
-                        ddSketchCollapsing.accept(globalActivePower);
-                        kllsketch.update((float) globalActivePower);
-                        reqSketch.update((float) globalActivePower);
-                        uddsketch.accept(globalActivePower);
                     }
 
                     kurtosis = new Kurtosis();
@@ -352,32 +366,45 @@ public class Quantiler {
                     kurtosisVal = round(kurtosis.evaluate(target), 4);
                     System.out.println("Kurtosis (Power) : " + kurtosisVal);
 
-                    Collections.sort(actualKurtosisData);
-                    realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                    momentsQ = round(Math.exp(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0]), 4);
-                    ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                    ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
-                    kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
-                    reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
-                    uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                    resultString =
-                        "Power," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
-                            "," + reqQ + "," + uddsQ;
-                    System.out.println(resultString);
-                    kurtosisWriter.write(resultString + "\n");
+                    for (int iter = 0; iter < numIters; iter++) {
+                        ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                        ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                            () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
+                        uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                        kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                        momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                        momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
+                        reqSketch =
+                            ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                                .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+
+                        for (double globalActivePower : actualKurtosisData) {
+                            momentSketch.add(Math.log(globalActivePower));
+                            ddsketch.accept(globalActivePower);
+                            ddSketchCollapsing.accept(globalActivePower);
+                            kllsketch.update((float) globalActivePower);
+                            reqSketch.update((float) globalActivePower);
+                            uddsketch.accept(globalActivePower);
+                        }
+
+                        Collections.sort(actualKurtosisData);
+                        realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                        momentsQ = round(Math.exp(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0]), 4);
+                        ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                        ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
+                        kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                        reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                        uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                        resultString =
+                            "Power," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," +
+                                kllQ +
+                                "," + reqQ + "," + uddsQ;
+                        System.out.println(resultString);
+                        kurtosisWriter.write(resultString + "\n");
+                    }
                 }
 
                 if (RUN_KURT_NYT) {
-                    ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
-                    ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
-                        () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
-                    uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
-                    kllsketch = new KllFloatsSketch(KLL_PARAM_K);
-                    momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-                    momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
-                    reqSketch =
-                        ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
-                            .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
                     actualKurtosisData.clear();
 
                     // NYT dataset
@@ -388,12 +415,6 @@ public class Quantiler {
                         String[] line_array = line.split(splitBy);    // use comma as separator
                         double totalAmount = Double.parseDouble(line_array[10]);
                         actualKurtosisData.add(totalAmount);
-                        momentSketch.add(totalAmount);
-                        ddsketch.accept(totalAmount);
-                        ddSketchCollapsing.accept(totalAmount);
-                        kllsketch.update((float) totalAmount);
-                        reqSketch.update((float) totalAmount);
-                        uddsketch.accept(totalAmount);
                     }
 
                     kurtosis = new Kurtosis();
@@ -406,19 +427,43 @@ public class Quantiler {
                     kurtosisVal = round(kurtosis.evaluate(target), 4);
                     System.out.println("Kurtosis (NYT) : " + kurtosisVal);
 
-                    Collections.sort(actualKurtosisData);
-                    realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
-                    momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
-                    ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                    ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
-                    kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
-                    reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
-                    uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
-                    resultString =
-                        "NYT," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
-                            "," + reqQ + "," + uddsQ;
-                    System.out.println(resultString);
-                    kurtosisWriter.write(resultString + "\n");
+                    for (int iter = 0; iter < numIters; iter++) {
+
+                        ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                        ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                            () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
+                        uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                        kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                        momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                        momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
+                        reqSketch =
+                            ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                                .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+
+                        for (double totalAmount : actualKurtosisData) {
+                            momentSketch.add(totalAmount);
+                            ddsketch.accept(totalAmount);
+                            ddSketchCollapsing.accept(totalAmount);
+                            kllsketch.update((float) totalAmount);
+                            reqSketch.update((float) totalAmount);
+                            uddsketch.accept(totalAmount);
+                        }
+
+                        Collections.sort(actualKurtosisData);
+                        realQ = round(percentile(actualKurtosisData, percentileOfInterest), 4);
+                        momentsQ = round(momentSketch.getQuantiles(new double[]{percentileOfInterest})[0], 4);
+                        ddsQ = round(ddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                        ddscQ = round(ddSketchCollapsing.getValueAtQuantile(percentileOfInterest), 4);
+                        kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
+                        reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
+                        uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+                        resultString =
+                            "NYT," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," +
+                                kllQ +
+                                "," + reqQ + "," + uddsQ;
+                        System.out.println(resultString);
+                        kurtosisWriter.write(resultString + "\n");
+                    }
                 }
 
                 kurtosisWriter.close();
