@@ -46,16 +46,12 @@ public class Quantiler {
                 Math.tanh(FastMath.atanh(UDDS_PARAM_RELATIVE_ACCURACY) / Math.pow(2.0, UDDS_PARAM_K - 1));
 
             // Sketch Algorithms
-            DDSketch ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
-            DDSketch ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
-                () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
-            UniformDDSketch uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
-            KllFloatsSketch kllsketch = new KllFloatsSketch(KLL_PARAM_K);
-            SimpleMomentSketch momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-            momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
-            ReqSketch reqSketch =
-                ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
-                    .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+            DDSketch ddsketch;
+            DDSketch ddSketchCollapsing;
+            UniformDDSketch uddsketch;
+            KllFloatsSketch kllsketch;
+            SimpleMomentSketch momentSketch;
+            ReqSketch reqSketch;
 
             if (RUN_K_TESTS) {
                 runKTests();
