@@ -124,7 +124,7 @@ public class Quantiler {
                     for (int i = 0; i < dataSizeAdaptability; i++) {
                         double sampled_value = binD.sample();
                         all_data.add(sampled_value);
-                        momentSketch.add(Math.log(sampled_value));
+                        momentSketch.add(sampled_value);
                         ddsketch.accept(sampled_value);
                         ddSketchCollapsing.accept(sampled_value);
                         kllsketch.update((float) sampled_value);
@@ -135,7 +135,7 @@ public class Quantiler {
                     for (int i = 0; i < dataSizeAdaptability; i++) {
                         double sampled_value_2 = unif_adapt_test.sample();
                         all_data.add(sampled_value_2);
-                        momentSketch.add(Math.log(sampled_value_2));
+                        momentSketch.add(sampled_value_2);
                         ddsketch.accept(sampled_value_2);
                         ddSketchCollapsing.accept(sampled_value_2);
                         kllsketch.update((float) sampled_value_2);
@@ -154,8 +154,7 @@ public class Quantiler {
 
                     double[] percentilesAdaptability = {.01, .05, .25, .50, .75, .90, .95, .98, .99};
 
-                    double[] resultsMomentsAdapt =
-                        Arrays.stream(momentSketch.getQuantiles(percentilesAdaptability)).map(Math::exp).toArray();
+                    double[] resultsMomentsAdapt = momentSketch.getQuantiles(percentilesAdaptability);
                     double[] resultsDDSAdapt = ddsketch.getValuesAtQuantiles(percentilesAdaptability);
                     double[] resultsDDSCollapsingAdapt =
                         ddSketchCollapsing.getValuesAtQuantiles(percentilesAdaptability);
