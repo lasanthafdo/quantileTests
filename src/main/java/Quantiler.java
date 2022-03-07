@@ -36,6 +36,7 @@ public class Quantiler {
     public static final boolean RUN_KURT_POWER = true;
     public static final boolean RUN_KURT_NYT = true;
     private static final boolean RUN_UDDS_TESTS = false;
+    public static final boolean MOMENTS_PARAM_COMPRESSED = true;
 
     public static void main(String[] args) {
         int runMode = Integer.parseInt(args[0]);
@@ -51,7 +52,7 @@ public class Quantiler {
             UniformDDSketch uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
             KllFloatsSketch kllsketch = new KllFloatsSketch(KLL_PARAM_K);
             SimpleMomentSketch momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-            momentSketch.setCompressed(true);
+            momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
             ReqSketch reqSketch =
                 ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                     .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -107,6 +108,17 @@ public class Quantiler {
                     "======= Running adaptability tests with data size : " + dataSizeAdaptability + " x 2 =========");
                 FileWriter adaptabilityWriter = new FileWriter("adaptability_data.txt");
                 for (int iter = 0; iter < 6; iter++) {
+                    ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                    ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
+                        () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
+                    uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+                    kllsketch = new KllFloatsSketch(KLL_PARAM_K);
+                    momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                    momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
+                    reqSketch =
+                        ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                            .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+
                     long startInsert = System.nanoTime();
 
                     for (int i = 0; i < dataSizeAdaptability; i++) {
@@ -259,7 +271,7 @@ public class Quantiler {
                 uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                 kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                 momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-                momentSketch.setCompressed(true);
+                momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
                 reqSketch =
                     ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                         .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -309,7 +321,7 @@ public class Quantiler {
                     uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                     kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                     momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-                    momentSketch.setCompressed(true);
+                    momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
                     reqSketch =
                         ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                             .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -363,7 +375,7 @@ public class Quantiler {
                     uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                     kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                     momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
-                    momentSketch.setCompressed(true);
+                    momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
                     reqSketch =
                         ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                             .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -433,6 +445,7 @@ public class Quantiler {
                     uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                     kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                     momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                    momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
                     reqSketch =
                         ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                             .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -585,6 +598,7 @@ public class Quantiler {
                     uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
                     kllsketch = new KllFloatsSketch(KLL_PARAM_K);
                     momentSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                    momentSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
                     reqSketch =
                         ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                             .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
@@ -828,6 +842,7 @@ public class Quantiler {
                 KllFloatsSketch kllFloatsSketch = new KllFloatsSketch(KLL_PARAM_K);
                 kllFloatsSketches.add(kllFloatsSketch);
                 SimpleMomentSketch msSketch = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                msSketch.setCompressed(MOMENTS_PARAM_COMPRESSED);
                 momentSketches.add(msSketch);
                 ReqSketch reqSketch =
                     ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
