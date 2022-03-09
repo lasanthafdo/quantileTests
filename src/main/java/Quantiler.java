@@ -104,7 +104,7 @@ public class Quantiler {
                 System.out.println(
                     "======= Running adaptability tests with data size : " + dataSizeAdaptability + " x 2 =========");
                 FileWriter adaptabilityWriter = new FileWriter("adaptability_data.txt");
-                for (int iter = 0; iter < 6; iter++) {
+                for (int iter = 0; iter < 12; iter++) {
                     ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
                     ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
                         () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
@@ -224,7 +224,7 @@ public class Quantiler {
 
                 ArrayList<Double> actualKurtosisData = new ArrayList<>();
                 double percentileOfInterest = 0.98;
-                int numIters = 6;
+                int numIters = 12;
                 double realQ, momentsQ, ddsQ, ddscQ, kllQ, reqQ, uddsQ;
                 String resultString;
                 FileWriter kurtosisWriter = new FileWriter("kurtosis_data.txt");
