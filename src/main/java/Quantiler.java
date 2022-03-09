@@ -35,6 +35,7 @@ public class Quantiler {
     public static final boolean PRINT_QUERY_RESULTS = false;
     public static final boolean RUN_KURT_POWER = true;
     public static final boolean RUN_KURT_NYT = true;
+    public static final boolean RUN_WARM_UP_FOR_MERGE = true;
     private static final boolean RUN_UDDS_TESTS = false;
     public static final boolean MOMENTS_PARAM_COMPRESSED = true;
 
@@ -606,7 +607,7 @@ public class Quantiler {
                     dataSizes.add(100_000_000);
                 }
 
-                int numThousandMilIters = 5;
+                int numThousandMilIters = 12;
                 for (int i = 0; i < numThousandMilIters; i++) {
                     dataSizes.add(1_000_000_000);
                 }
@@ -615,9 +616,9 @@ public class Quantiler {
                     Collections.reverse(dataSizes);
                 }
 
-                int itersForWarmUp = 3;
+                int itersForWarmUp = 20;
                 for (int i = 0; i < itersForWarmUp; i++) {
-                    dataSizes.add(0, 1_000_000_000);
+                    dataSizes.add(0, 10_000_000);
                 }
 
                 long startPopulate = System.currentTimeMillis();
@@ -935,6 +936,36 @@ public class Quantiler {
                     }
                 }
                 k++;
+            }
+
+            if (RUN_WARM_UP_FOR_MERGE) {
+                DDSketch ddSketchWarmUp = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
+                KllFloatsSketch kllFloatsSketchWarmUp = new KllFloatsSketch(KLL_PARAM_K);
+                SimpleMomentSketch momentsSketchWarmUp = new SimpleMomentSketch(MOMEMNTS_PARAM_K);
+                momentsSketchWarmUp.setCompressed(MOMENTS_PARAM_COMPRESSED);
+                ReqSketch reqSketchWarmUp =
+                    ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
+                        .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
+                double alphaZero =
+                    Math.tanh(FastMath.atanh(UDDS_PARAM_RELATIVE_ACCURACY) / Math.pow(2.0, UDDS_PARAM_K - 1));
+                UniformDDSketch uniformDDSketchWarmUp = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
+
+                int warmUpRuns = Math.min(numSketches, 100);
+                for (int i = 1; i < warmUpRuns; i++) {
+                    momentsSketchWarmUp.merge(momentSketches.get(i));
+                }
+                for (int i = 1; i < warmUpRuns; i++) {
+                    ddSketchWarmUp.mergeWith(ddSketches.get(i));
+                }
+                for (int i = 1; i < warmUpRuns; i++) {
+                    kllFloatsSketchWarmUp.merge(kllFloatsSketches.get(i));
+                }
+                for (int i = 1; i < warmUpRuns; i++) {
+                    reqSketchWarmUp.merge(reqSketches.get(i));
+                }
+                for (int i = 1; i < warmUpRuns; i++) {
+                    uniformDDSketchWarmUp.mergeWith(uddSketches.get(i));
+                }
             }
 
             DDSketch orig_dds = ddSketches.get(0);
