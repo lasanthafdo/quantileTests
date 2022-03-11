@@ -105,6 +105,7 @@ public class Quantiler {
                     "======= Running adaptability tests with data size : " + dataSizeAdaptability + " x 2 =========");
                 FileWriter adaptabilityWriter = new FileWriter("adaptability_data.txt");
                 for (int iter = 0; iter < 12; iter++) {
+                    all_data.clear();
                     ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
                     ddSketchCollapsing = new DDSketch(new LogarithmicMapping(DDS_PARAM_RELATIVE_ACCURACY),
                         () -> new CollapsingLowestDenseStore(UDDS_PARAM_MAX_NUM_BUCKETS));
