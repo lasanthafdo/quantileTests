@@ -347,7 +347,7 @@ public class Quantiler {
                     BufferedReader brPower =
                         new BufferedReader(
                             new FileReader("/home/m34ferna/flink-benchmarks/household_power_consumption.txt"));
-                    while ((line = brPower.readLine()) != null) {
+                    while ((line = brPower.readLine()) != null && actualKurtosisData.size() <= dataSizeKurtosis) {
                         String[] line_array = line.split(delimiterPowerDataset);    // use comma as separator
                         double globalActivePower = Double.parseDouble(line_array[2]);
                         actualKurtosisData.add(globalActivePower);
@@ -408,7 +408,7 @@ public class Quantiler {
                     String splitBy = ",";
                     BufferedReader brNYT =
                         new BufferedReader(new FileReader("/home/m34ferna/flink-benchmarks/nyt-data.csv"));
-                    while ((line = brNYT.readLine()) != null) {
+                    while ((line = brNYT.readLine()) != null && actualKurtosisData.size() <= dataSizeKurtosis) {
                         String[] line_array = line.split(splitBy);    // use comma as separator
                         double totalAmount = Double.parseDouble(line_array[10]);
                         actualKurtosisData.add(totalAmount);
