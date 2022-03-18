@@ -36,6 +36,8 @@ public class Quantiler {
     public static final boolean RUN_KURT_POWER = true;
     public static final boolean RUN_KURT_NYT = true;
     public static final boolean RUN_WARM_UP_FOR_MERGE = true;
+    public static final boolean SAVE_PARETO_SAMPLE = true;
+    public static final boolean SAVE_UNIFORM_SAMPLE = true;
     private static final boolean RUN_UDDS_TESTS = false;
     public static final boolean MOMENTS_PARAM_COMPRESSED = true;
 
@@ -332,6 +334,21 @@ public class Quantiler {
                     kllQ = round(kllsketch.getQuantile(percentileOfInterest), 4);
                     reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
                     uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
+
+                    long momentBytes = ObjectSizeFetcher.getObjectSize(momentSketch) +
+                        (long) (momentSketch.getK() + 2) * Double.BYTES;
+                    long ddsBytes =
+                        ObjectSizeFetcher.getObjectSize(ddsketch) + ddsketch.getPositiveValueStore().serializedSize();
+                    long ddscBytes = ObjectSizeFetcher.getObjectSize(ddSketchCollapsing) +
+                        ddSketchCollapsing.getPositiveValueStore().serializedSize();
+                    long uddsBytes = ObjectSizeFetcher.getObjectSize(uddsketch) + uddsketch.getSerializedStoreSize();
+                    System.out.println("Moments:" + momentBytes +
+                        ", DDS:" + ddsBytes
+                        + ", DDSC:" + ddscBytes
+                        + ", KLL:" + kllsketch.getSerializedSizeBytes()
+                        + ", REQ:" + reqSketch.getSerializationBytes()
+                        + ", UDDS:" + uddsBytes);
+
                     resultString =
                         "Pareto," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
                             "," + reqQ + "," + uddsQ;
@@ -588,6 +605,12 @@ public class Quantiler {
             if (CALC_POWER_STATS) {
                 calcPowerDatasetStats();
             }
+            if (SAVE_PARETO_SAMPLE) {
+                sampleToFile(ptoD, null, 1_000_000, "pareto");
+            }
+            if (SAVE_UNIFORM_SAMPLE) {
+                sampleToFile(null, uD, 1_000_000, "uniform");
+            }
 
             // Query tests
             if (runMode == 1 || runMode == 6) {
@@ -758,6 +781,28 @@ public class Quantiler {
             e.printStackTrace();
         }
 
+    }
+
+    private static void sampleToFile(ParetoDistribution ptoD, UniformRealDistribution uD,
+                                     int sampleSize, String distType) throws IOException {
+        String filename = distType + "_sample_" + sampleSize + ".csv";
+        FileWriter distSampleWriter = new FileWriter(filename);
+        distSampleWriter.write("index, sampled_val\n");
+        if (distType.equals("pareto")) {
+            assert ptoD != null;
+            for (int i = 0; i < sampleSize; i++) {
+                double sampledValue = ptoD.sample();
+                distSampleWriter.write(i + "," + sampledValue + "\n");
+            }
+        } else if (distType.equals("uniform")) {
+            assert uD != null;
+            for (int i = 0; i < sampleSize; i++) {
+                double sampledValue = uD.sample();
+                distSampleWriter.write(i + "," + sampledValue + "\n");
+            }
+        }
+        distSampleWriter.close();
+        System.out.println("Wrote " + distType + " sample of " + sampleSize + " to " + filename);
     }
 
     private static void runUDDSTests() {
