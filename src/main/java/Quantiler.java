@@ -36,8 +36,9 @@ public class Quantiler {
     public static final boolean RUN_KURT_POWER = true;
     public static final boolean RUN_KURT_NYT = true;
     public static final boolean RUN_WARM_UP_FOR_MERGE = true;
-    public static final boolean SAVE_PARETO_SAMPLE = true;
-    public static final boolean SAVE_UNIFORM_SAMPLE = true;
+    public static final boolean SAVE_PARETO_SAMPLE = false;
+    public static final boolean SAVE_UNIFORM_SAMPLE = false;
+    public static final boolean MEASURE_SKETCH_SIZES = false;
     private static final boolean RUN_UDDS_TESTS = false;
     public static final boolean MOMENTS_PARAM_COMPRESSED = true;
 
@@ -233,8 +234,15 @@ public class Quantiler {
                 FileWriter kurtosisWriter = new FileWriter("kurtosis_data.txt");
 
                 // Uniform
+                NormalDistribution uniformNormal = new NormalDistribution(100, 25);
+                NormalDistribution uniformNormal2 = new NormalDistribution(1000, 100);
+                UniformRealDistribution uDKurt =
+                    new UniformRealDistribution(uniformNormal.sample(), uniformNormal2.sample());
                 for (int i = 0; i < dataSizeKurtosis; i++) {
-                    double sampled_value = uD.sample();
+                    if (i % 50000 == 0) {
+                        uDKurt = new UniformRealDistribution(uniformNormal.sample(), uniformNormal2.sample());
+                    }
+                    double sampled_value = uDKurt.sample();
                     actualKurtosisData.add(sampled_value);
                 }
 
@@ -288,9 +296,21 @@ public class Quantiler {
 
                 // Pareto
                 actualKurtosisData.clear();
-
+                NormalDistribution paretoNormal = new NormalDistribution(1, 0.05);
+                double shapeParam = paretoNormal.sample();
+                while (shapeParam < 0.01) {
+                    shapeParam = paretoNormal.sample();
+                }
+                ParetoDistribution ptoDKurt = new ParetoDistribution(shapeParam, shapeParam);
                 for (int i = 0; i < dataSizeKurtosis; i++) {
-                    double sampled_value = ptoD.sample();
+                    if (i % 50000 == 0) {
+                        shapeParam = paretoNormal.sample();
+                        while (shapeParam < 0.01) {
+                            shapeParam = paretoNormal.sample();
+                        }
+                        ptoDKurt = new ParetoDistribution(shapeParam, shapeParam);
+                    }
+                    double sampled_value = ptoDKurt.sample();
                     actualKurtosisData.add(sampled_value);
                 }
 
@@ -335,20 +355,23 @@ public class Quantiler {
                     reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
                     uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
 
-                    long momentBytes = ObjectSizeFetcher.getObjectSize(momentSketch) +
-                        (long) (momentSketch.getK() + 2) * Double.BYTES;
-                    long ddsBytes =
-                        ObjectSizeFetcher.getObjectSize(ddsketch) + ddsketch.getPositiveValueStore().serializedSize();
-                    long ddscBytes = ObjectSizeFetcher.getObjectSize(ddSketchCollapsing) +
-                        ddSketchCollapsing.getPositiveValueStore().serializedSize();
-                    long uddsBytes = ObjectSizeFetcher.getObjectSize(uddsketch) + uddsketch.getSerializedStoreSize();
-                    System.out.println("Moments:" + momentBytes +
-                        ", DDS:" + ddsBytes
-                        + ", DDSC:" + ddscBytes
-                        + ", KLL:" + kllsketch.getSerializedSizeBytes()
-                        + ", REQ:" + reqSketch.getSerializationBytes()
-                        + ", UDDS:" + uddsBytes);
-
+                    if(MEASURE_SKETCH_SIZES) {
+                        long momentBytes = ObjectSizeFetcher.getObjectSize(momentSketch) +
+                            (long) (momentSketch.getK() + 2) * Double.BYTES;
+                        long ddsBytes =
+                            ObjectSizeFetcher.getObjectSize(ddsketch) +
+                                ddsketch.getPositiveValueStore().serializedSize();
+                        long ddscBytes = ObjectSizeFetcher.getObjectSize(ddSketchCollapsing) +
+                            ddSketchCollapsing.getPositiveValueStore().serializedSize();
+                        long uddsBytes =
+                            ObjectSizeFetcher.getObjectSize(uddsketch) + uddsketch.getSerializedStoreSize();
+                        System.out.println("Moments:" + momentBytes +
+                            ", DDS:" + ddsBytes
+                            + ", DDSC:" + ddscBytes
+                            + ", KLL:" + kllsketch.getSerializedSizeBytes()
+                            + ", REQ:" + reqSketch.getSerializationBytes()
+                            + ", UDDS:" + uddsBytes);
+                    }
                     resultString =
                         "Pareto," + kurtosisVal + "," + realQ + "," + momentsQ + "," + ddsQ + "," + ddscQ + "," + kllQ +
                             "," + reqQ + "," + uddsQ;
@@ -606,10 +629,10 @@ public class Quantiler {
                 calcPowerDatasetStats();
             }
             if (SAVE_PARETO_SAMPLE) {
-                sampleToFile(ptoD, null, 1_000_000, "pareto");
+                sampleToFile(1_000_000, "pareto");
             }
             if (SAVE_UNIFORM_SAMPLE) {
-                sampleToFile(null, uD, 1_000_000, "uniform");
+                sampleToFile(1_000_000, "uniform");
             }
 
             // Query tests
@@ -783,19 +806,35 @@ public class Quantiler {
 
     }
 
-    private static void sampleToFile(ParetoDistribution ptoD, UniformRealDistribution uD,
-                                     int sampleSize, String distType) throws IOException {
+    private static void sampleToFile(int sampleSize, String distType) throws IOException {
         String filename = distType + "_sample_" + sampleSize + ".csv";
         FileWriter distSampleWriter = new FileWriter(filename);
         distSampleWriter.write("index, sampled_val\n");
         if (distType.equals("pareto")) {
-            assert ptoD != null;
+            double maxPareto = 0;
+            NormalDistribution paretoNormal = new NormalDistribution(1, 0.05);
+            double shapeParam = paretoNormal.sample();
+            while (shapeParam < 0.01) {
+                shapeParam = paretoNormal.sample();
+            }
+            ParetoDistribution ptoD = new ParetoDistribution(shapeParam, shapeParam);
             for (int i = 0; i < sampleSize; i++) {
+                if (i % 50000 == 0) {
+                    shapeParam = paretoNormal.sample();
+                    while (shapeParam < 0.01) {
+                        shapeParam = paretoNormal.sample();
+                    }
+                    ptoD = new ParetoDistribution(shapeParam, shapeParam);
+                }
                 double sampledValue = ptoD.sample();
+                if (sampledValue > maxPareto) {
+                    maxPareto = sampledValue;
+                }
                 distSampleWriter.write(i + "," + sampledValue + "\n");
             }
+            System.out.println("Max value:" + maxPareto);
         } else if (distType.equals("uniform")) {
-            assert uD != null;
+            UniformRealDistribution uD = new UniformRealDistribution(0, 1000);
             for (int i = 0; i < sampleSize; i++) {
                 double sampledValue = uD.sample();
                 distSampleWriter.write(i + "," + sampledValue + "\n");
