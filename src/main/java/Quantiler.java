@@ -35,7 +35,7 @@ public class Quantiler {
     public static final boolean PRINT_QUERY_RESULTS = false;
     public static final boolean RUN_KURT_POWER = true;
     public static final boolean RUN_KURT_NYT = true;
-    public static final boolean RUN_WARM_UP_FOR_MERGE = true;
+    public static final boolean RUN_WARM_UP_FOR_MERGE = false;
     public static final boolean SAVE_PARETO_SAMPLE = false;
     public static final boolean SAVE_UNIFORM_SAMPLE = false;
     public static final boolean MEASURE_SKETCH_SIZES = false;
@@ -72,8 +72,20 @@ public class Quantiler {
             if (runMode == 3) {
                 ArrayList<Integer> numSketchesList = new ArrayList<>();
                 numSketchesList.add(10);
+                numSketchesList.add(10);
+                numSketchesList.add(10);
+
                 numSketchesList.add(100);
+                numSketchesList.add(100);
+
+                numSketchesList.add(100);
+                numSketchesList.add(100);
+                numSketchesList.add(100);
+
                 numSketchesList.add(1000);
+                numSketchesList.add(1000);
+                numSketchesList.add(1000);
+
                 runMergeTests(dataSizeMerge, numSketchesList);
             }
 
@@ -107,6 +119,7 @@ public class Quantiler {
                 System.out.println(
                     "======= Running adaptability tests with data size : " + dataSizeAdaptability + " x 2 =========");
                 FileWriter adaptabilityWriter = new FileWriter("adaptability_data.txt");
+                FileWriter adaptabilityDistWriter = new FileWriter("adaptability_dist.csv");
                 for (int iter = 0; iter < 12; iter++) {
                     all_data.clear();
                     ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
@@ -153,6 +166,14 @@ public class Quantiler {
                     System.out.println(
                         "Insert time - millis : " + TimeUnit.NANOSECONDS.toMillis(elapsedTimeInsert));
 
+                    if (iter == 0) {
+                        adaptabilityDistWriter.write("index, adapt_val\n");
+                        for (int i = 0; i < all_data.size(); i++) {
+                            adaptabilityDistWriter.write(i + "," + all_data.get(i) + "\n");
+                        }
+                        System.out.println(
+                            "Wrote adaptability sample of " + all_data.size() + " to adaptability_dist.csv");
+                    }
                     double[] percentilesAdaptability = {.01, .05, .25, .50, .75, .90, .95, .98, .99};
 
                     double[] resultsMomentsAdapt = momentSketch.getQuantiles(percentilesAdaptability);
@@ -215,6 +236,7 @@ public class Quantiler {
                             round(resultsUDDSAdapt[i], 4) + "\n");
                     }
                 }
+                adaptabilityDistWriter.close();
                 adaptabilityWriter.close();
                 System.out.println("======== End of adaptability tests ========");
             }
@@ -355,7 +377,7 @@ public class Quantiler {
                     reqQ = round(reqSketch.getQuantile(percentileOfInterest), 4);
                     uddsQ = round(uddsketch.getValueAtQuantile(percentileOfInterest), 4);
 
-                    if(MEASURE_SKETCH_SIZES) {
+                    if (MEASURE_SKETCH_SIZES) {
                         long momentBytes = ObjectSizeFetcher.getObjectSize(momentSketch) +
                             (long) (momentSketch.getK() + 2) * Double.BYTES;
                         long ddsBytes =
@@ -512,16 +534,30 @@ public class Quantiler {
                 System.out.println("=========== Starting insert time tests ==============");
 
                 ArrayList<Integer> dataSizes = new ArrayList<>(4);
+
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+                dataSizes.add(10_000_000);
+
                 dataSizes.add(10_000_000);
                 dataSizes.add(10_000_000);
                 dataSizes.add(10_000_000);
                 dataSizes.add(10_000_000);
                 dataSizes.add(10_000_000);
+
+                dataSizes.add(100_000_000);
+                dataSizes.add(100_000_000);
+                dataSizes.add(100_000_000);
+                dataSizes.add(100_000_000);
                 dataSizes.add(100_000_000);
 
                 FileWriter insertWriter = new FileWriter("insert_times.txt");
 
+                int insertIter = 0;
                 for (Integer dataSize : dataSizes) {
+                    insertIter++;
+                    System.out.println("======================================================");
+                    long startInsertOp, elapsedTimeOp;
                     long[] insertResults = new long[5];
                     ddsketch = new DDSketch(DDS_PARAM_RELATIVE_ACCURACY);
                     uddsketch = new UniformDDSketch(UDDS_PARAM_MAX_NUM_BUCKETS, alphaZero);
@@ -532,11 +568,16 @@ public class Quantiler {
                         ReqSketch.builder().setK(REQ_PARAM_K).setHighRankAccuracy(REQ_PARAM_HIGH_RANK_ACCURACY)
                             .setLessThanOrEqual(REQ_PARAM_LT_EQ).build();
 
+                    FileWriter momentsInsertWriter =
+                        new FileWriter("moments_insert_times_" + dataSize + "_" + insertIter + ".txt");
                     long startInsert = System.nanoTime();
 
                     for (int i = 0; i < dataSize; i++) {
                         double sampled_value = ptoD.sample();
+                        startInsertOp = System.nanoTime();
                         momentSketch.add(sampled_value);
+                        elapsedTimeOp = System.nanoTime() - startInsertOp;
+                        momentsInsertWriter.write(i + "," + elapsedTimeOp + "\n");
                     }
 
                     long endInsert = System.nanoTime();
@@ -548,12 +589,19 @@ public class Quantiler {
                     System.out.println(
                         "MomentSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeInsertNanos);
                     insertResults[0] = elapsedTimeInsertMicros;
+                    momentsInsertWriter.close();
 
+                    // DDSketch
+                    FileWriter ddsInsertWriter =
+                        new FileWriter("dds_insert_times_" + dataSize + "_" + insertIter + ".txt");
                     startInsert = System.nanoTime();
 
                     for (int i = 0; i < dataSize; i++) {
                         double sampled_value = ptoD.sample();
+                        startInsertOp = System.nanoTime();
                         ddsketch.accept(sampled_value);
+                        elapsedTimeOp = System.nanoTime() - startInsertOp;
+                        ddsInsertWriter.write(i + "," + elapsedTimeOp + "\n");
                     }
 
                     endInsert = System.nanoTime();
@@ -564,12 +612,19 @@ public class Quantiler {
                         "DDSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeInsertMicros);
                     System.out.println("DDSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeInsertNanos);
                     insertResults[1] = elapsedTimeInsertMicros;
+                    ddsInsertWriter.close();
 
+                    //KLL Sketch
+                    FileWriter kllInsertWriter =
+                        new FileWriter("kll_insert_times_" + dataSize + "_" + insertIter + ".txt");
                     startInsert = System.nanoTime();
 
                     for (int i = 0; i < dataSize; i++) {
                         double sampled_value = ptoD.sample();
+                        startInsertOp = System.nanoTime();
                         kllsketch.update((float) sampled_value);
+                        elapsedTimeOp = System.nanoTime() - startInsertOp;
+                        kllInsertWriter.write(i + "," + elapsedTimeOp + "\n");
                     }
 
                     endInsert = System.nanoTime();
@@ -580,13 +635,19 @@ public class Quantiler {
                         "KLLSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeInsertMicros);
                     System.out.println("KLLSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeInsertNanos);
                     insertResults[2] = elapsedTimeInsertMicros;
+                    kllInsertWriter.close();
 
                     // REQ
+                    FileWriter reqInsertWriter =
+                        new FileWriter("req_insert_times_" + dataSize + "_" + insertIter + ".txt");
                     startInsert = System.nanoTime();
 
                     for (int i = 0; i < dataSize; i++) {
                         double sampled_value = ptoD.sample();
+                        startInsertOp = System.nanoTime();
                         reqSketch.update((float) sampled_value);
+                        elapsedTimeOp = System.nanoTime() - startInsertOp;
+                        reqInsertWriter.write(i + "," + elapsedTimeOp + "\n");
                     }
 
                     endInsert = System.nanoTime();
@@ -597,13 +658,19 @@ public class Quantiler {
                         "REQSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeInsertMicros);
                     System.out.println("REQSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeInsertNanos);
                     insertResults[3] = elapsedTimeInsertMicros;
+                    reqInsertWriter.close();
 
                     // UDDS
+                    FileWriter uddsInsertWriter =
+                        new FileWriter("udds_insert_times_" + dataSize + "_" + insertIter + ".txt");
                     startInsert = System.nanoTime();
 
                     for (int i = 0; i < dataSize; i++) {
                         double sampled_value = ptoD.sample();
+                        startInsertOp = System.nanoTime();
                         uddsketch.accept(sampled_value);
+                        elapsedTimeOp = System.nanoTime() - startInsertOp;
+                        uddsInsertWriter.write(i + "," + elapsedTimeOp + "\n");
                     }
 
                     endInsert = System.nanoTime();
@@ -614,6 +681,7 @@ public class Quantiler {
                         "UDDSketch - Insert time [" + dataSize + "] (micros): " + elapsedTimeInsertMicros);
                     System.out.println("UDDSketch - Insert time [" + dataSize + "] (nanos): " + elapsedTimeInsertNanos);
                     insertResults[4] = elapsedTimeInsertMicros;
+                    uddsInsertWriter.close();
 
                     insertWriter.write(dataSize + "," + Arrays.toString(insertResults) + "\n");
                 }
@@ -819,7 +887,7 @@ public class Quantiler {
             }
             ParetoDistribution ptoD = new ParetoDistribution(shapeParam, shapeParam);
             for (int i = 0; i < sampleSize; i++) {
-                if (i % 50000 == 0) {
+                if (i % 5 == 0) {
                     shapeParam = paretoNormal.sample();
                     while (shapeParam < 0.01) {
                         shapeParam = paretoNormal.sample();
@@ -947,10 +1015,12 @@ public class Quantiler {
          */
         FileWriter mergeWriter = new FileWriter("merge_times.txt");
 
+        int mergeIter = 0;
         for (Integer numSketches : numSketchesList) {
             System.out.println(
                 "======== Starting merge tests for data size " + dataSize + " with " +
                     numSketches + " sketches ========");
+            mergeIter++;
             UniformRealDistribution uD2 = new UniformRealDistribution(1, 5000);
             BinomialDistribution binD2 = new BinomialDistribution(100, 0.2);
             ZipfDistribution zipD2 = new ZipfDistribution(20, 0.6);
@@ -1059,10 +1129,18 @@ public class Quantiler {
             ReqSketch orig_req = reqSketches.get(0);
             UniformDDSketch orig_udds = uddSketches.get(0);
 
+            long elapsedTimeOp, startMergeOp;
+
+            //Moments
+            FileWriter momentsMergeWriter =
+                new FileWriter("moments_merge_times_" + numSketches + "_" + mergeIter + ".txt");
             long startMerge = System.nanoTime();
 
             for (int i = 1; i < numSketches; i++) {
+                startMergeOp = System.nanoTime();
                 orig_moments.merge(momentSketches.get(i));
+                elapsedTimeOp = System.nanoTime() - startMergeOp;
+                momentsMergeWriter.write(i + "," + elapsedTimeOp + "\n");
             }
 
             long endMerge = System.nanoTime();
@@ -1072,11 +1150,18 @@ public class Quantiler {
                 "MomentsSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
             System.out.println("MomentsSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[0] = elapsedTimeMergeMicros;
+            momentsMergeWriter.close();
 
+            // DDS
+            FileWriter ddsMergeWriter =
+                new FileWriter("dds_merge_times_" + numSketches + "_" + mergeIter + ".txt");
             startMerge = System.nanoTime();
 
             for (int i = 1; i < numSketches; i++) {
+                startMergeOp = System.nanoTime();
                 orig_dds.mergeWith(ddSketches.get(i));
+                elapsedTimeOp = System.nanoTime() - startMergeOp;
+                ddsMergeWriter.write(i + "," + elapsedTimeOp + "\n");
             }
 
             endMerge = System.nanoTime();
@@ -1087,11 +1172,18 @@ public class Quantiler {
                 "DDSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
             System.out.println("DDSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[1] = elapsedTimeMergeMicros;
+            ddsMergeWriter.close();
 
+            // KLL
+            FileWriter kllMergeWriter =
+                new FileWriter("kll_merge_times_" + numSketches + "_" + mergeIter + ".txt");
             startMerge = System.nanoTime();
 
             for (int i = 1; i < numSketches; i++) {
+                startMergeOp = System.nanoTime();
                 orig_kll.merge(kllFloatsSketches.get(i));
+                elapsedTimeOp = System.nanoTime() - startMergeOp;
+                kllMergeWriter.write(i + "," + elapsedTimeOp + "\n");
             }
 
             endMerge = System.nanoTime();
@@ -1101,11 +1193,18 @@ public class Quantiler {
                 "KLLSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
             System.out.println("KLLSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[2] = elapsedTimeMergeMicros;
+            kllMergeWriter.close();
 
+            // REQ
+            FileWriter reqMergeWriter =
+                new FileWriter("req_merge_times_" + numSketches + "_" + mergeIter + ".txt");
             startMerge = System.nanoTime();
 
             for (int i = 1; i < numSketches; i++) {
+                startMergeOp = System.nanoTime();
                 orig_req.merge(reqSketches.get(i));
+                elapsedTimeOp = System.nanoTime() - startMergeOp;
+                reqMergeWriter.write(i + "," + elapsedTimeOp + "\n");
             }
 
             endMerge = System.nanoTime();
@@ -1115,11 +1214,18 @@ public class Quantiler {
                 "REQSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
             System.out.println("REQSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[3] = elapsedTimeMergeMicros;
+            reqMergeWriter.close();
 
+            // UDDS
+            FileWriter uddsMergeWriter =
+                new FileWriter("udds_merge_times_" + numSketches + "_" + mergeIter + ".txt");
             startMerge = System.nanoTime();
 
             for (int i = 1; i < numSketches; i++) {
+                startMergeOp = System.nanoTime();
                 orig_udds.mergeWith(uddSketches.get(i));
+                elapsedTimeOp = System.nanoTime() - startMergeOp;
+                uddsMergeWriter.write(i + "," + elapsedTimeOp + "\n");
             }
 
             endMerge = System.nanoTime();
@@ -1129,6 +1235,7 @@ public class Quantiler {
                 "UDDSketch - Merge time [" + numSketches + "] (micros): " + elapsedTimeMergeMicros);
             System.out.println("UDDSketch - Merge time [" + numSketches + "] (nanos): " + elapsedTimeMergeNanos);
             mergeResults[4] = elapsedTimeMergeMicros;
+            uddsMergeWriter.close();
 
             mergeWriter.write(numSketches + "," + Arrays.toString(mergeResults) + "\n");
         }
