@@ -30,7 +30,7 @@ public class Quantiler {
     public static final boolean REQ_PARAM_LT_EQ = false;
     public static final boolean CALC_POWER_STATS = false;
     public static final boolean CALC_NYT_STATS = false;
-    public static final boolean RUN_K_TESTS = false;
+    public static final boolean RUN_K_TESTS = true;
     public static final boolean RUN_INIT_TESTS = false;
     public static final boolean PRINT_QUERY_RESULTS = false;
     public static final boolean RUN_KURT_POWER = true;
@@ -39,6 +39,9 @@ public class Quantiler {
     public static final boolean SAVE_PARETO_SAMPLE = false;
     public static final boolean SAVE_UNIFORM_SAMPLE = false;
     public static final boolean MEASURE_SKETCH_SIZES = false;
+    public static final boolean PREPROCESS_INSERT_MERGE_RESULTS = true;
+    public static final boolean PREPROCESS_INSERT_TIMES = false;
+    public static final boolean PREPROCESS_MERGE_TIMES = true;
     private static final boolean RUN_UDDS_TESTS = false;
     public static final boolean MOMENTS_PARAM_COMPRESSED = true;
 
@@ -702,6 +705,9 @@ public class Quantiler {
             if (SAVE_UNIFORM_SAMPLE) {
                 sampleToFile(1_000_000, "uniform");
             }
+            if (PREPROCESS_INSERT_MERGE_RESULTS) {
+                preprocessInsertMergeResults();
+            }
 
             // Query tests
             if (runMode == 1 || runMode == 6) {
@@ -964,8 +970,9 @@ public class Quantiler {
         System.out.println("Get K");
         System.out.println(KllFloatsSketch.getKFromEpsilon(0.01, true));
         System.out.println(KllFloatsSketch.getKFromEpsilon(0.01, false));
+        System.out.println(KllFloatsSketch.getNormalizedRankError(200, true));
         System.out.println("End K");
-        System.out.println("RSE: " + ReqSketch.builder().build().getRSE(30, 0.98, false, 1_000_000));
+        System.out.println("RSE: " + ReqSketch.builder().build().getRSE(30, 0.5, true, 1_000_000));
     }
 
     private static void calcPowerDatasetStats() throws IOException {
@@ -1006,6 +1013,71 @@ public class Quantiler {
         System.out.println("NYT min max");
         System.out.println(Collections.min(valuesRead));
         System.out.println(Collections.max(valuesRead));
+    }
+
+    private static void preprocessInsertMergeResults() throws IOException {
+        String line;
+        String splitBy = ",";
+        int iter = 3;
+        int numIters = 5;
+        String[] algorithms = {"moments", "dds", "kll", "req", "udds"};
+        if (PREPROCESS_INSERT_TIMES) {
+            FileWriter insertAggWriter = new FileWriter("agg_insert_times.csv");
+            int[] dataSizes = {10_000_000, 100_000_000};
+            for (int dataSize : dataSizes) {
+                for (int i = 0; i < numIters; i++) {
+                    iter++;
+                    StringBuilder resultString = new StringBuilder().append(dataSize);
+                    for (String algorithm : algorithms) {
+                        BufferedReader br = new BufferedReader(
+                            new FileReader("results/" + algorithm + "_insert_times_" + dataSize + "_" + iter + ".txt"));
+                        long totalTime = 0;
+                        int totCount = 0;
+                        while ((line = br.readLine()) != null) {
+                            String[] line_array = line.split(splitBy);    // use comma as separator
+                            long insertOpTime = Long.parseLong(line_array[1]);
+                            totalTime += insertOpTime;
+                            totCount += 1;
+                        }
+                        System.out.println(algorithm + "(" + totCount + "):" + totalTime);
+                        resultString.append(",").append(totalTime / 1000);
+                        br.close();
+                    }
+                    insertAggWriter.write(resultString.append("\n").toString());
+                }
+            }
+            insertAggWriter.close();
+        }
+        if (PREPROCESS_MERGE_TIMES) {
+            FileWriter mergeAggWriter = new FileWriter("agg_merge_times.csv");
+            int[] sketchSizes = {100, 1000};
+            numIters = 3;
+            iter = 5;
+            for (int numSketches : sketchSizes) {
+                for (int i = 0; i < numIters; i++) {
+                    iter++;
+                    StringBuilder resultString = new StringBuilder().append(numSketches);
+                    for (String algorithm : algorithms) {
+                        BufferedReader br = new BufferedReader(
+                            new FileReader(
+                                "results/" + algorithm + "_merge_times_" + numSketches + "_" + iter + ".txt"));
+                        long totalTime = 0;
+                        int totCount = 0;
+                        while ((line = br.readLine()) != null) {
+                            String[] line_array = line.split(splitBy);    // use comma as separator
+                            long mergeOpTime = Long.parseLong(line_array[1]);
+                            totalTime += mergeOpTime;
+                            totCount += 1;
+                        }
+                        System.out.println(algorithm + "(" + totCount + "):" + totalTime);
+                        resultString.append(",").append(totalTime / 1000);
+                        br.close();
+                    }
+                    mergeAggWriter.write(resultString.append("\n").toString());
+                }
+            }
+            mergeAggWriter.close();
+        }
     }
 
     private static void runMergeTests(int dataSize, ArrayList<Integer> numSketchesList) throws IOException {
