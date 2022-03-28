@@ -264,7 +264,7 @@ public class Quantiler {
                 UniformRealDistribution uDKurt =
                     new UniformRealDistribution(uniformNormal.sample(), uniformNormal2.sample());
                 for (int i = 0; i < dataSizeKurtosis; i++) {
-                    if (i % 50000 == 0) {
+                    if (i % 50 == 0) {
                         uDKurt = new UniformRealDistribution(uniformNormal.sample(), uniformNormal2.sample());
                     }
                     double sampled_value = uDKurt.sample();
@@ -328,7 +328,7 @@ public class Quantiler {
                 }
                 ParetoDistribution ptoDKurt = new ParetoDistribution(shapeParam, shapeParam);
                 for (int i = 0; i < dataSizeKurtosis; i++) {
-                    if (i % 50000 == 0) {
+                    if (i % 50 == 0) {
                         shapeParam = paretoNormal.sample();
                         while (shapeParam < 0.01) {
                             shapeParam = paretoNormal.sample();
@@ -893,7 +893,7 @@ public class Quantiler {
             }
             ParetoDistribution ptoD = new ParetoDistribution(shapeParam, shapeParam);
             for (int i = 0; i < sampleSize; i++) {
-                if (i % 5 == 0) {
+                if (i % 50 == 0) {
                     shapeParam = paretoNormal.sample();
                     while (shapeParam < 0.01) {
                         shapeParam = paretoNormal.sample();
